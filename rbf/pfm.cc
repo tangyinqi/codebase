@@ -209,6 +209,15 @@ RC SlotDirectory::updateSlotLength(int slotNum, int len)
 
 }
 
+RC SlotDirectory::updateSlotOffset(int slotNum, int off)
+{
+	if(slotNum > lastSlotNum)return -27;
+	SlotDirectoryNode * p = psList[slotNum];
+	p->updateSlotOffset(off);
+	return 0;
+
+}
+
 const int SlotDirectory::getEndPosition()
 {
 	if(lastSlotNum == -1)return 0;
@@ -237,6 +246,11 @@ const int SlotDirectory::getLength(int slotNum)
 	return ptr->getSlotLength();
 }
 
+void SlotDirectory::setLastSlotNum(int num)
+{
+	lastSlotNum = num;
+}
+
 SlotDirectoryNode *SlotDirectory::getSlotNode(int num)
 {
 	if(num > lastSlotNum)return NULL;
@@ -244,10 +258,13 @@ SlotDirectoryNode *SlotDirectory::getSlotNode(int num)
 	return p;
 }
 
-void SlotDirectory::setLastSlotNum(int num)
+RC SlotDirectory::setSlotDeleted(int slotNum)
 {
-	lastSlotNum = num;
+	if(slotNum > lastSlotNum)return -22;
+	SlotDirectoryNode *p = psList[slotNum];
+	return p->setDelete();
 }
+
 /*
 const SlotDir SlotDirectory::getSlotDir(int slotNum){
 	PageSlotDirectory *psDir = psList;
@@ -555,8 +572,15 @@ RC FileHandle::savePageInfo()
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
 	printf("......entering readPage()......\n");
-	if(pageNum > pageMaxNum) return -1000;
-	printf("pagenumber:%d\n",pageNum);
+	if(pageMaxNum == -1){
+		return -1001;
+	}
+	if(pageMaxNum < pageNum)
+	{
+		return -1000;
+	}else{
+		printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
+	}
 	//memset(data, '\0', PAGE_SIZE);
 
 	fseek (pFile, pageNum * PAGE_SIZE, SEEK_SET);
@@ -573,6 +597,15 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 
 RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
+	if(pageMaxNum == -1){
+		return -1001;
+	}
+	if(pageMaxNum < pageNum)
+	{
+		return -1000;
+	}else{
+		printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
+	}
 	printf("writePage: data to be written %s\n", data);
 	fseek (pFile, pageNum * PAGE_SIZE, SEEK_SET);
 	int count = fwrite(data, 1, PAGE_SIZE, pFile);
@@ -684,6 +717,16 @@ RC FileHandle::appendSlot(int pageNum, int bytes)
 	printf("append a new slot no.%d for page. %d, offset: %d\n", p->getLastSlotNum(), pageMaxNum, offset);
 	return rc;
 }
+/*
+RC FileHandle::reorganizePage(int pageNum)
+{
+	//read page
+
+	//re-organize
+
+	//write back
+
+}*/
 
 
 int FileHandle::lookforSlot(int pNum, int bytesNeed)
@@ -713,6 +756,14 @@ RC FileHandle::updateSlotLen(int pageNum, int slotNum, int len)
 	if(pageNum > pageMaxNum)return -21;
 	SlotDirectory * p = pageSlotDirectory[pageNum];
 	int rc = p->updateSlotLength(slotNum, len);
+	return rc;
+}
+
+RC FileHandle::updateSlotOffset(int pageNum, int slotNum, int off)
+{
+	if(pageNum > pageMaxNum)return -21;
+	SlotDirectory * p = pageSlotDirectory[pageNum];
+	int rc = p->updateSlotOffset(slotNum, off);
 	return rc;
 }
 
@@ -752,4 +803,12 @@ const int FileHandle::getLastSlotNum(int PageNum){
 	if(PageNum > pageMaxNum) return -21;
 	SlotDirectory * p = pageSlotDirectory[PageNum];
 	return p->getLastSlotNum();
+}
+
+
+RC FileHandle::setSlotDeleted(int pageNum, int slotNum)
+{
+	if(pageNum > pageMaxNum) return -21;
+	SlotDirectory * p = pageSlotDirectory[pageNum];
+	return p->setSlotDeleted(slotNum);
 }

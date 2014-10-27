@@ -31,7 +31,7 @@ class SlotDirectoryNode
 private:
 	int slotNum;
 	SlotDir ptr;
-//	SlotDirectoryNode *next;
+	SlotDirectoryNode *next;
 	bool deleted;
 protected:
 
@@ -86,6 +86,7 @@ public:
 	RC deleteSlot(int slotNum);
 	const int lookforSlotNum(int bytesNeed);//-1:no deleted slot has required space
 	RC updateSlotLength(int slotNum, int len);
+	RC updateSlotOffset(int slotNum, int off);
 
 	const int getEndPosition();//offset+length of last slot
 
@@ -95,6 +96,8 @@ public:
 	const int getLastSlotNum();
 	void setLastSlotNum(int);
 	SlotDirectoryNode *getSlotNode(int num);
+
+	RC setSlotDeleted(int slotNum);
 //	SlotDirectory *next;
 };
 
@@ -177,8 +180,14 @@ public:
 
 	RC appendSlot(int pageNum, int bytes); //after append a slot
 
+//	RC reorganizePage(int pageNum);//move free space to the end of a page.
+
+
 	int lookforPage(int bytesNeed);
 	int lookforSlot(int pageNum, int bytesNeed);
+
+	RC setSlotDeleted(int pageNum, int slotNum);
+
 	RC reduceFreeBytes(int pageNum, int bytes);
 	RC addFreeBytes(int pageNum, int bytes);
 
@@ -186,6 +195,8 @@ public:
 	int getLength(int pageNum, int slotNum);//rid: pageId and slot id, return offset from the start of page
 
 	RC updateSlotLen(int pageNum, int slotNum, int len);
+	RC updateSlotOffset(int pageNum, int slotNum, int len);
+
 	int getEndPosition(int PageNum);//offset+ length of last slot in page: PageNum
 	const int getLastSlotNum(int PageNum);
 

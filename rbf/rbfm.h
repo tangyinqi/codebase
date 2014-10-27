@@ -58,15 +58,33 @@ The scan iterator is NOT required to be implemented for part 1 of the project
 //  }
 //  rbfmScanIterator.close();
 
+class RecordBasedFileManager;
 
 class RBFM_ScanIterator {
+
+private:
+	int pos;
+	vector<RID> position;
+	vector<Attribute> recordDescriptor; //the attribute of the whole records
+	vector<int> attributePosition;//the position of attribute in original records.
+	vector<string> attributeNames;
+	RecordBasedFileManager *rbfmPtr;
+	FileHandle *fileHandlePtr;
+
 public:
-  RBFM_ScanIterator() {};
+  RBFM_ScanIterator();
   ~RBFM_ScanIterator() {};
 
+  RC setAttribtues(const vector<Attribute> recordDescriptor);
+  RC setAttributeNames(const vector<string> &attributeNames);
+  RC setRecordBasedFileManager(RecordBasedFileManager *rbfm);
+  RC setFileHandle(FileHandle &fileHandle);
+
+  RC addPosition(const RID &rid);
+
   // "data" follows the same format as RecordBasedFileManager::insertRecord()
-  RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
-  RC close() { return -1; };
+  RC getNextRecord(RID &rid, void *data);
+  RC close();
 };
 
 
@@ -121,7 +139,6 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
       const void *value,                    // used in the comparison
       const vector<string> &attributeNames, // a list of projected attributes
       RBFM_ScanIterator &rbfm_ScanIterator);
-
 
 // Extra credit for part 2 of the project, please ignore for part 1 of the project
 public:
