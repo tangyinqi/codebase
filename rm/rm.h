@@ -4,13 +4,17 @@
 
 #include <string>
 #include <vector>
+//#include <stdio.h>
+#include <map>
 
 #include "../rbf/rbfm.h"
 
 using namespace std;
 
+//extern bool FileExists(const char *fileName);
 
 # define RM_EOF (-1)  // end of a scan operator
+# define CATALOG ".catalog"
 
 // RM_ScanIterator is an iteratr to go through tuples
 // The way to use it is like the following:
@@ -21,20 +25,31 @@ using namespace std;
 //  }
 //  rmScanIterator.close();
 
-class RM_ScanIterator {
+class RM_ScanIterator: public RBFM_ScanIterator{
 public:
   RM_ScanIterator() {};
   ~RM_ScanIterator() {};
 
   // "data" follows the same format as RelationManager::insertTuple()
-  RC getNextTuple(RID &rid, void *data);
-  RC close() { return -1; };
+  RC getNextTuple(RID &rid, void *data){
+	  int rc = RBFM_ScanIterator::getNextRecord(rid, data);
+	  return rc;
+  };
+  RC close(){
+	  int rc = RBFM_ScanIterator::close();
+	  return rc;
+  };
 };
 
 
 // Relation Manager
 class RelationManager
 {
+private:
+	map<string, FileHandle> filehandles;
+	map<string, FileHandle> filehandles_catalog;
+	map<string, vector<Attribute> > attributes;
+
 public:
   static RelationManager* instance();
 

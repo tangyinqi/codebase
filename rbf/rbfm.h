@@ -3,19 +3,15 @@
 
 #include <string>
 #include <vector>
-
+#include "iostream"
+#include <stdlib.h>
+#include <cassert>
 //#include "../rbf/pfm.h"
 
 #include "pfm.h"
 
 using namespace std;
 
-// Record ID
-typedef struct
-{
-  unsigned pageNum;
-  unsigned slotNum;
-} RID;
 
 
 // Attribute
@@ -62,14 +58,14 @@ class RecordBasedFileManager;
 
 class RBFM_ScanIterator {
 
-private:
+protected:
 	int pos;
 	vector<RID> position;
 	vector<Attribute> recordDescriptor; //the attribute of the whole records
 	vector<int> attributePosition;//the position of attribute in original records.
 	vector<string> attributeNames;
 	RecordBasedFileManager *rbfmPtr;
-	FileHandle *fileHandlePtr;
+	FileHandle fileHandlePtr;
 
 public:
   RBFM_ScanIterator();

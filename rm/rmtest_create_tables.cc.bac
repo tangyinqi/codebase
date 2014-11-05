@@ -1,5 +1,5 @@
 #include "test_util.h"
-/*
+
 int main()
 {
     // Remove files that might be created by previous test run
@@ -25,4 +25,4 @@ int main()
 
     return 0;
 }
-*/
+

@@ -14,10 +14,12 @@ typedef unsigned PageNum;
 #include <string>
 //#include <stdlib.h>
 #include <vector>
-
+#include "cassert"
+#include <sys/stat.h>
 
 using namespace std;
 
+bool FileExists(const char *fileName);
 
 struct SlotDir{
  int offset;//bytes from the start of page
@@ -25,14 +27,22 @@ struct SlotDir{
  //SlotDir(int off, int len){ offset = off; length = len;}
 };
 
+// Record ID
+typedef struct
+{
+  unsigned pageNum;
+  unsigned slotNum;
+} RID;
+
 
 class SlotDirectoryNode
 {
 private:
 	int slotNum;
 	SlotDir ptr;
-	SlotDirectoryNode *next;
+	RID next;
 	bool deleted;
+	bool tombStone;
 protected:
 
 	~SlotDirectoryNode();
@@ -49,8 +59,11 @@ public:
 	RC updateSlotLength(int len);
 	RC updateSlotOffset(int offset);
 
-	void setNext(SlotDirectoryNode *);
-	SlotDirectoryNode *getNext();
+	RC setTombStoneRID(const RID &rid);
+	RC getTombStoneRID(RID &rid);
+
+	RC setTombStone();
+	const bool isTombStone();
 
 	RC setDelete();
 	RC setUsed();
@@ -65,7 +78,7 @@ public:
 class SlotDirectory
 {
 private:
-	int pageNum;
+	unsigned pageNum;
 	int lastSlotNum;//start from 0;
 	vector<SlotDirectoryNode *> psList;
 //	SlotDirectoryNode *curr; //the last element
@@ -84,6 +97,8 @@ public:
 
 	const SlotDir getSlotDir(int slotNum);
 	RC deleteSlot(int slotNum);
+
+
 	const int lookforSlotNum(int bytesNeed);//-1:no deleted slot has required space
 	RC updateSlotLength(int slotNum, int len);
 	RC updateSlotOffset(int slotNum, int off);
@@ -98,13 +113,21 @@ public:
 	SlotDirectoryNode *getSlotNode(int num);
 
 	RC setSlotDeleted(int slotNum);
+	const bool isSlotDeleted(int slotNum);
+
+	RC setSlotTombStone(int slotNum);
+	const bool isSlotTombSone(int slotNum);
+
+	RC setSlotTombStoneRID(int slotNum, const RID &rid);
+	RC getSlotTombStoneRID(int slotNum, RID &rid);
+
 //	SlotDirectory *next;
 };
 
 class FreeBytes
 {
 private:
-	int pageNum;
+	unsigned pageNum;
 	int freeBytes;//left bytes of a page
 
 protected:
@@ -113,12 +136,13 @@ protected:
 public:
 	FreeBytes();
 	~FreeBytes();
-	void setPageNum(int);
+	void setPageNum(unsigned);
 	void setFreeBytes(int);
-	const int getPageNum();
+	const unsigned getPageNum();
 	const int getFreeBytes();
 	RC reduceFreeBytes(int);
 	RC addFreeBytes(int);
+	RC reset();
 //	FreeBytes *next;
 };
 
@@ -150,7 +174,7 @@ class FileHandle
 private:
 	FILE *pFile;
 	FILE *pageInfo;
-	int pageMaxNum;
+	unsigned pageMaxNum;
 
     vector<FreeBytes *> fbList;
 //    FreeBytes * curr;
@@ -178,27 +202,34 @@ public:
 
 	RC appendToSlotDirectory();//after FileHandle::appendPage(), append a slot directory
 
-	RC appendSlot(int pageNum, int bytes); //after append a slot
+	RC appendSlot(unsigned pageNum, int bytes); //after append a slot
 
-//	RC reorganizePage(int pageNum);//move free space to the end of a page.
+	unsigned lookforPage(int bytesNeed);
+	unsigned lookforSlot(unsigned pageNum, int bytesNeed);
+
+	RC setSlotDeleted(unsigned pageNum, int slotNum);
+	const bool isSlotDeleted(unsigned pageNum, int slotNum);
+
+	RC setSlotTombStone(unsigned pageNum, int slotNum);
+	const bool isSlotTombStone(unsigned pageNum, int slotNum);
+
+	RC setSlotTombStoneRID(unsigned pageNum, int slotNum, const RID &rid);
+	RC getSlotTombStoneRID(unsigned pageNum, int slotNum, RID &rid);
 
 
-	int lookforPage(int bytesNeed);
-	int lookforSlot(int pageNum, int bytesNeed);
+	RC reduceFreeBytes(unsigned pageNum, int bytes);
+	RC addFreeBytes(unsigned pageNum, int bytes);
+	const int getFreeBytes(unsigned pageNum);
+	RC reset(unsigned pageNum);
 
-	RC setSlotDeleted(int pageNum, int slotNum);
+	int getOffset(unsigned pageNum, int slotNum);//rid: pageId and slot id, return offset from the start of page
+	int getLength(unsigned pageNum, int slotNum);//rid: pageId and slot id, return offset from the start of page
 
-	RC reduceFreeBytes(int pageNum, int bytes);
-	RC addFreeBytes(int pageNum, int bytes);
+	RC updateSlotLen(unsigned pageNum, int slotNum, int len);
+	RC updateSlotOffset(unsigned pageNum, int slotNum, int len);
 
-	int getOffset(int pageNum, int slotNum);//rid: pageId and slot id, return offset from the start of page
-	int getLength(int pageNum, int slotNum);//rid: pageId and slot id, return offset from the start of page
-
-	RC updateSlotLen(int pageNum, int slotNum, int len);
-	RC updateSlotOffset(int pageNum, int slotNum, int len);
-
-	int getEndPosition(int PageNum);//offset+ length of last slot in page: PageNum
-	const int getLastSlotNum(int PageNum);
+	int getEndPosition(unsigned PageNum);//offset+ length of last slot in page: PageNum
+	const int getLastSlotNum(unsigned PageNum);
 
  };
 

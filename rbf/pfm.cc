@@ -4,9 +4,9 @@
 //#include <string>
 //#include <stdlib.h>
 #include <stdio.h>
-#include <sys/stat.h>
+
 #include <unistd.h>
-#include <assert.h>
+//#include <assert.h>
 #include <string>
 
 /******************   helper method   **********************/
@@ -28,8 +28,10 @@ SlotDirectoryNode::SlotDirectoryNode()
 	slotNum = -1;
 	ptr.length=-1;
 	ptr.offset=-1;
-//	next = NULL;
+	next.pageNum = -1;
+	next.slotNum = -1;
 	deleted = false;
+	tombStone = false;
 }
 
 SlotDirectoryNode::~SlotDirectoryNode(){
@@ -80,16 +82,30 @@ void SlotDirectoryNode::setSlotDir(int off, int len)
 	printf("offset:%d, length:%d\n", ptr.offset, ptr.length);
 }
 
-//void SlotDirectoryNode::setNext(SlotDirectoryNode *p)
-//{
-//	next = p;
-//}
-//
-//SlotDirectoryNode *SlotDirectoryNode::getNext()
-//{
-//	return next;
-//}
+RC SlotDirectoryNode::setTombStone()
+{
+	tombStone = true;
+	return 0;
+}
 
+const bool SlotDirectoryNode::isTombStone()
+{
+	return tombStone;
+}
+
+RC SlotDirectoryNode::setTombStoneRID(const RID &rid)
+{
+	next.pageNum = rid.pageNum;
+	next.slotNum = rid.slotNum;
+	return 0;
+}
+
+RC SlotDirectoryNode::getTombStoneRID(RID &rid)
+{
+	rid.pageNum = next.pageNum;
+	rid.slotNum = next.slotNum;
+	return 0;
+}
 
 RC SlotDirectoryNode::setDelete()
 {
@@ -265,6 +281,44 @@ RC SlotDirectory::setSlotDeleted(int slotNum)
 	return p->setDelete();
 }
 
+const bool SlotDirectory::isSlotDeleted(int slotNum)
+{
+	if(slotNum > lastSlotNum)return -22;
+	SlotDirectoryNode *p = psList[slotNum];
+	return p->isDeleted();
+}
+
+RC SlotDirectory::setSlotTombStone(int slotNum)
+{
+	if(slotNum > lastSlotNum)return -22;
+	SlotDirectoryNode *p = psList[slotNum];
+	return p->setTombStone();
+}
+
+const bool SlotDirectory::isSlotTombSone(int slotNum)
+{
+	if(slotNum > lastSlotNum)return -22;
+	SlotDirectoryNode *p = psList[slotNum];
+	return p->isTombStone();
+}
+
+RC SlotDirectory::setSlotTombStoneRID(int slotNum, const RID &rid)
+{
+	if(slotNum > lastSlotNum)return -22;
+	SlotDirectoryNode *p = psList[slotNum];
+	return p->setTombStoneRID(rid);
+}
+
+RC SlotDirectory::getSlotTombStoneRID(int slotNum, RID &rid)
+{
+	if(slotNum > lastSlotNum)return -22;
+	SlotDirectoryNode *p = psList[slotNum];
+	if(!p->isTombStone()){
+		return -23;
+	}
+	return p->getTombStoneRID(rid);
+}
+
 /*
 const SlotDir SlotDirectory::getSlotDir(int slotNum){
 	PageSlotDirectory *psDir = psList;
@@ -297,7 +351,7 @@ FreeBytes::~FreeBytes(){
 	//delete next;
 }
 
-void FreeBytes::setPageNum(int num){
+void FreeBytes::setPageNum(unsigned num){
 	pageNum = num;
 }
 
@@ -305,7 +359,7 @@ void FreeBytes::setFreeBytes(int fbytes){
 	freeBytes = fbytes;
 }
 
-const int FreeBytes::getPageNum()
+const unsigned FreeBytes::getPageNum()
 {
 	return pageNum;
 }
@@ -316,7 +370,10 @@ const int FreeBytes::getFreeBytes()
 }
 
 RC FreeBytes::reduceFreeBytes(int bytes){
-	if(bytes > freeBytes) return -17;
+	if(bytes > freeBytes) {
+		printf("freeBytes=%d , bytes=%d \n", freeBytes, bytes);
+		return -17;
+	}
 	freeBytes -= bytes;
 	return 0;
 }
@@ -324,6 +381,11 @@ RC FreeBytes::reduceFreeBytes(int bytes){
 RC FreeBytes::addFreeBytes(int bytes){
 	if((bytes + freeBytes) > PAGE_SIZE) return -19;
 	freeBytes += bytes;
+	return 0;
+}
+
+RC FreeBytes::reset(){
+	freeBytes = PAGE_SIZE;
 	return 0;
 }
 
@@ -472,10 +534,12 @@ RC FileHandle::readPageInfo()
 	printf("......entering readPageInfo......\n");
 	int offset = 0;
 	fseek(pageInfo, offset, SEEK_SET);
-	fread(&pageMaxNum, sizeof(int), 1, pageInfo);
-	offset += sizeof(int);
+	fread(&pageMaxNum, sizeof(unsigned), 1, pageInfo);
+	offset += sizeof(unsigned);
 	printf("pageMaxNum: %d\n", pageMaxNum);
 
+	fbList.clear();
+	pageSlotDirectory.clear();
 	for (int i = 0; i < pageMaxNum + 1; i++) {
 		FreeBytes *fb = (FreeBytes *)malloc(sizeof(FreeBytes));//fbList[i];
 		fseek(pageInfo, offset, SEEK_SET);
@@ -524,8 +588,8 @@ RC FileHandle::savePageInfo()
 	printf("......entering savePageInfo......\n");
 	int offset = 0;
 	fseek(pageInfo, offset, SEEK_SET);
-	fwrite(&pageMaxNum, sizeof(int), 1, pageInfo);
-	offset += sizeof(int);
+	fwrite(&pageMaxNum, sizeof(unsigned), 1, pageInfo);
+	offset += sizeof(unsigned);
 	printf("pageMaxNum: %d\n", pageMaxNum);
 
 	for(int i=0; i<pageMaxNum+1; i++)
@@ -541,15 +605,15 @@ RC FileHandle::savePageInfo()
 	{
 		SlotDirectory *sd = pageSlotDirectory[i];
 		fseek(pageInfo, offset, SEEK_SET);
-		int pageNum = sd->getPageNum();
-		fwrite(&pageNum, sizeof(int), 1, pageInfo);
-		offset += sizeof(int);
+		unsigned pageNum = sd->getPageNum();
+		fwrite(&pageNum, sizeof(unsigned), 1, pageInfo);
+		offset += sizeof(unsigned);
 		printf("page number: %d \t", pageNum);
 
 		fseek(pageInfo, offset, SEEK_SET);
-		int lastSlotNum = sd->getLastSlotNum();
-		fwrite(&lastSlotNum, sizeof(int), 1, pageInfo);
-		offset += sizeof(int);
+		unsigned lastSlotNum = sd->getLastSlotNum();
+		fwrite(&lastSlotNum, sizeof(unsigned), 1, pageInfo);
+		offset += sizeof(unsigned);
 		printf("last slot number: %d\n", lastSlotNum);
 
 		for(int j=0;j<sd->getLastSlotNum()+1;j++)
@@ -573,10 +637,13 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 {
 	printf("......entering readPage()......\n");
 	if(pageMaxNum == -1){
+		printf("pageMaxNum = -1\n");
 		return -1001;
 	}
 	if(pageMaxNum < pageNum)
 	{
+		printf("pageMaxNum < pageNum\n");
+		printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
 		return -1000;
 	}else{
 		printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
@@ -622,8 +689,8 @@ RC FileHandle::appendPage(const void *data)
 	printf("......entering appendPage().......\n");
 	pageMaxNum++;
 	fseek(pFile, pageMaxNum * PAGE_SIZE, SEEK_SET);
-	fwrite(data, 1, PAGE_SIZE, pFile);
-	printf("new page appended! no.%d\n", pageMaxNum);
+	int count = fwrite(data, 1, PAGE_SIZE, pFile);
+	printf("new page appended! no.%d, bytes: %d \n", pageMaxNum, count);
 
 	int rc = appendToPageFreeSpace();
 	assert(rc == 0);
@@ -640,7 +707,7 @@ unsigned FileHandle::getNumberOfPages()
     return pageMaxNum+1;
 }
 
-RC FileHandle::reduceFreeBytes(int pageNum, int bytes)
+RC FileHandle::reduceFreeBytes(unsigned pageNum, int bytes)
 {
 	printf("......entering reduceFreeBytes()......\n");
 	if(pageNum > pageMaxNum)
@@ -648,16 +715,36 @@ RC FileHandle::reduceFreeBytes(int pageNum, int bytes)
 	FreeBytes *fb = fbList[pageNum];
 	/***for test **/
 	printf("reduce %d bytes in page %d\n", bytes, pageNum);
-	return fb->reduceFreeBytes(bytes);
+	int rc = fb->reduceFreeBytes(bytes);
+	assert(rc == 0);
+	return 0;
 }
 
 
-RC FileHandle::addFreeBytes(int pageNum, int bytes)
+RC FileHandle::addFreeBytes(unsigned pageNum, int bytes)
 {
 	if(pageNum > pageMaxNum)
 			return -15;
 	FreeBytes *fb = fbList[pageNum];
 	return fb->addFreeBytes(bytes);
+}
+
+
+const int FileHandle::getFreeBytes(unsigned pageNum)
+{
+	if(pageNum > pageMaxNum)
+			return -15;
+	FreeBytes *fb = fbList[pageNum];
+	return fb->getFreeBytes();
+}
+
+
+RC FileHandle::reset(unsigned pageNum)
+{
+	if(pageNum > pageMaxNum)
+			return -15;
+	FreeBytes *fb = fbList[pageNum];
+	return fb->reset();
 }
 
 
@@ -676,7 +763,7 @@ RC FileHandle::appendToPageFreeSpace()
 //
 //	}
 //	curr = fb;
-	printf("append free space for page. %d\n", pageMaxNum);
+	printf("append free space for page. %d, bytes: %d \n", pageMaxNum, fb->getFreeBytes());
 	return 0;
 }
 
@@ -694,7 +781,7 @@ RC FileHandle::appendToSlotDirectory()
 }
 
 //do free space management before append slotdir(offset, bytes) to the slotdirectory of pageNum
-RC FileHandle::appendSlot(int pageNum, int bytes)
+RC FileHandle::appendSlot(unsigned pageNum, int bytes)
 {
 	printf("......entering appendSlot()......\n");
 	if(pageNum > pageMaxNum) return -21;
@@ -729,7 +816,7 @@ RC FileHandle::reorganizePage(int pageNum)
 }*/
 
 
-int FileHandle::lookforSlot(int pNum, int bytesNeed)
+unsigned FileHandle::lookforSlot(unsigned pNum, int bytesNeed)
 {
 	if(pNum>pageMaxNum) return -21;
 	SlotDirectory * p = pageSlotDirectory[pNum];
@@ -737,7 +824,7 @@ int FileHandle::lookforSlot(int pNum, int bytesNeed)
 
 }
 
-int FileHandle::lookforPage(int bytesNeed){
+unsigned FileHandle::lookforPage(int bytesNeed){
 	FreeBytes *fb;
 	for(int i=0; i< fbList.size(); i++)
 	{
@@ -751,7 +838,7 @@ int FileHandle::lookforPage(int bytesNeed){
 	return -1;
 }
 
-RC FileHandle::updateSlotLen(int pageNum, int slotNum, int len)
+RC FileHandle::updateSlotLen(unsigned pageNum, int slotNum, int len)
 {
 	if(pageNum > pageMaxNum)return -21;
 	SlotDirectory * p = pageSlotDirectory[pageNum];
@@ -759,7 +846,7 @@ RC FileHandle::updateSlotLen(int pageNum, int slotNum, int len)
 	return rc;
 }
 
-RC FileHandle::updateSlotOffset(int pageNum, int slotNum, int off)
+RC FileHandle::updateSlotOffset(unsigned pageNum, int slotNum, int off)
 {
 	if(pageNum > pageMaxNum)return -21;
 	SlotDirectory * p = pageSlotDirectory[pageNum];
@@ -767,7 +854,7 @@ RC FileHandle::updateSlotOffset(int pageNum, int slotNum, int off)
 	return rc;
 }
 
-int FileHandle::getOffset(int pageNum, int slotNum)
+int FileHandle::getOffset(unsigned pageNum, int slotNum)
 {
 	if(pageNum > pageMaxNum)
 	{
@@ -780,7 +867,7 @@ int FileHandle::getOffset(int pageNum, int slotNum)
 	return offset;
 }
 
-int FileHandle::getLength(int pageNum, int slotNum)
+int FileHandle::getLength(unsigned pageNum, int slotNum)
 {
 	if(pageNum > pageMaxNum)
 	{
@@ -793,22 +880,57 @@ int FileHandle::getLength(int pageNum, int slotNum)
 	return len;
 }
 
-int FileHandle::getEndPosition(int PageNum){
+int FileHandle::getEndPosition(unsigned PageNum){
 	if(PageNum > pageMaxNum) return -21;
 	SlotDirectory * p = pageSlotDirectory[PageNum];
 	return p->getEndPosition();
 }
 
-const int FileHandle::getLastSlotNum(int PageNum){
+const int FileHandle::getLastSlotNum(unsigned PageNum){
 	if(PageNum > pageMaxNum) return -21;
 	SlotDirectory * p = pageSlotDirectory[PageNum];
 	return p->getLastSlotNum();
 }
 
 
-RC FileHandle::setSlotDeleted(int pageNum, int slotNum)
+RC FileHandle::setSlotDeleted(unsigned pageNum, int slotNum)
 {
 	if(pageNum > pageMaxNum) return -21;
 	SlotDirectory * p = pageSlotDirectory[pageNum];
 	return p->setSlotDeleted(slotNum);
+}
+
+const bool FileHandle::isSlotDeleted(unsigned pageNum, int slotNum)
+{
+	if(pageNum > pageMaxNum) return -21;
+	SlotDirectory * p = pageSlotDirectory[pageNum];
+	return p->isSlotDeleted(slotNum);
+}
+
+RC FileHandle::setSlotTombStone(unsigned pageNum, int slotNum)
+{
+	if(pageNum > pageMaxNum) return -21;
+	SlotDirectory * p = pageSlotDirectory[pageNum];
+	return p->setSlotTombStone(slotNum);
+}
+
+const bool FileHandle::isSlotTombStone(unsigned pageNum, int slotNum)
+{
+	if(pageNum > pageMaxNum) return -21;
+	SlotDirectory * p = pageSlotDirectory[pageNum];
+	return p->isSlotTombSone(slotNum);
+}
+
+RC FileHandle::setSlotTombStoneRID(unsigned pageNum, int slotNum, const RID &rid)
+{
+	if(pageNum > pageMaxNum) return -21;
+	SlotDirectory * p = pageSlotDirectory[pageNum];
+	return p->setSlotTombStoneRID(slotNum, rid);
+}
+
+RC FileHandle::getSlotTombStoneRID(unsigned pageNum, int slotNum, RID &rid)
+{
+	if(pageNum > pageMaxNum) return -21;
+	SlotDirectory * p = pageSlotDirectory[pageNum];
+	return p->getSlotTombStoneRID(slotNum, rid);
 }
