@@ -23,9 +23,10 @@ void TEST_RM_10(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
         int size = 0;
         prepareLargeTuple(i, tuple, &size);
+
         if(memcmp(returnedData, tuple, sizes[i]) != 0)
         {
-            cout << "****Test case 10 failed****" << endl << endl;
+            cout << "****Test case 10 failed  No." << i << "****" << endl << endl;
             return;
         }
     }

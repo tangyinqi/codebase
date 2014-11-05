@@ -9,7 +9,7 @@ void TEST_RM_9(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
     RID rid; 
     void *tuple = malloc(1000);
-    int numTuples = 100;
+    int numTuples = 200;
 
     // GetAttributes
     vector<Attribute> attrs;
@@ -22,7 +22,7 @@ void TEST_RM_9(const string &tableName, vector<RID> &rids, vector<int> &sizes)
         cout << "Attribute Type: " << (AttrType)attrs[i].type << endl;
         cout << "Attribute Length: " << attrs[i].length << endl << endl;
     }
-
+    void *returnedData = malloc(1000);
     // Insert 2000 tuples into table
     for(int i = 0; i < numTuples; i++)
     {
@@ -33,6 +33,7 @@ void TEST_RM_9(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
         rc = rm->insertTuple(tableName, tuple, rid);
         assert(rc == success);
+
 
         rids.push_back(rid);
         sizes.push_back(size);        

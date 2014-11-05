@@ -323,13 +323,18 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		}else{
 			//insert into the slot
 			rid.slotNum = slotNum;
+			//??????
+			int slotLen = fileHandle.getLength(pageNum, slotNum);
+			assert(slotLen>=bytesNeed);
 
-			rc = fileHandle.reduceFreeBytes(pageNum, bytesNeed);
-			if(rc!=0)return rc;
+			rc = fileHandle.reduceFreeBytes(pageNum, (slotLen-bytesNeed));
+			assert(rc==0);
+
 			int offset = fileHandle.getOffset(pageNum, slotNum);
 			memcpy((char *)buffer + offset, (char *)data,  bytesNeed);
+
 			/**modify the slotDir to (offset, bytesNeed), for page PageNum**/
-			rc = fileHandle.updateSlotLen(pageNum,slotNum, offset);
+			rc = fileHandle.updateSlotLen(pageNum,slotNum, bytesNeed);
 			if(rc != 0)return rc;
 		}
 		printf("write back to page \n\n");
@@ -350,16 +355,18 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 		printf("####SLOT DELETED!###\n");
 		return -2000;
 	}
-	int pNum, sNum;
-	if(fileHandle.isSlotTombStone(rid.pageNum, rid.slotNum)){
+	if((rid.pageNum+1>fileHandle.getNumberOfPages()) && (rid.slotNum > fileHandle.getLastSlotNum(rid.pageNum)))
+		return -1;
+	int pNum = rid.pageNum;
+	int sNum = rid.slotNum;
+
+	while(fileHandle.isSlotTombStone(pNum, sNum))
+	{
 		RID ridNext;
-		int rc = fileHandle.getSlotTombStoneRID(rid.pageNum, rid.slotNum, ridNext);
+		int rc = fileHandle.getSlotTombStoneRID(pNum, sNum, ridNext);
 		assert(rc==0);
 		pNum = ridNext.pageNum;
 		sNum = ridNext.slotNum;
-	}else{
-		pNum = rid.pageNum;
-		sNum = rid.slotNum;
 	}
 
 
@@ -371,13 +378,13 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 		return -1001;
 	}
 
-	printf("****** before reading......\n");
+//	printf("****** before reading......\n");
 
 	int pageOffset = fileHandle.getOffset(pNum, sNum);
-	printf("page offset is %d\n", pageOffset);
-	if(recordDescriptor.size() != 0){
+//	printf("page offset is %d\n", pageOffset);
+	/*if(recordDescriptor.size() != 0){
 		printRecord(recordDescriptor, (char *)buffer + pageOffset);
-	}
+	}*/
 
 
 	Attribute attr;
@@ -387,54 +394,11 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 
 
 	memcpy(data, (char *)buffer + pageOffset, bufferLen);
-	printf("****** after memcpying......\n");
+	/*printf("****** after memcpying......\n");
 	if(recordDescriptor.size() != 0){
 		printRecord(recordDescriptor, data);
-	}
+	}*/
 
-	/*int offset = 0;
-	//int dataoffset=0;
-	int intval;
-	float floatval;
-	unsigned int namelenght;
-	for(int i=0; i< recordDescriptor.size(); i++)
-	{
-
-		//memcpy((char *)data + offset, (char *)buffer + pageOffset, attr.length);
-		switch (recordDescriptor[i].type) {
-				case 0:
-					memcpy(&intval, (char *) buffer + pageOffset + offset, sizeof(int));
-					cout << recordDescriptor[i].name << ": " << intval << "\t";
-					memcpy((int *)data+offset, &intval, sizeof(int));
-					offset += sizeof(int);
-					//dataoffset += sizeof(int);
-					break;
-				case 1:
-					memcpy(&floatval, (char *) buffer + pageOffset + offset, sizeof(float));
-					cout << recordDescriptor[i].name << ": " << floatval << "\t";
-					memcpy((float *)data+offset, &floatval, sizeof(float));
-					offset += sizeof(float);
-					//dataoffset += sizeof(float);
-					break;
-				case 2: //string case
-					//read name lengh//
-					memcpy(&namelenght, (char *) buffer + pageOffset + offset, sizeof(int));
-					//namelenght = *(int *)data + offset;
-					offset += sizeof(int);
-					//read the name//
-					char *name = (char *) malloc(namelenght + 1);
-					memset(name, '\0', namelenght + 1);
-					memcpy(name, (char *) buffer + pageOffset + offset, namelenght);
-					cout << recordDescriptor[i].name << ": " << name << "\t";
-
-					memcpy((char *)data+offset, name, namelenght);
-					offset += namelenght;
-					//dataoffset += namelenght;
-					break;
-				}
-	}
-
-	*/
 	// testing
 	printf("\n*********  after reading: ******\n");
 	if(recordDescriptor.size() != 0){
@@ -501,8 +465,8 @@ RC RecordBasedFileManager::deleteRecords(FileHandle &fileHandle)
 			rc = fileHandle.setSlotDeleted(pageNum, slotNum);
 			assert(rc == 0);
 			//modify the slot length of the deleted record to 0
-			rc = fileHandle.updateSlotLen(pageNum, slotNum, 0);
-			assert(rc == 0);
+			//rc = fileHandle.updateSlotLen(pageNum, slotNum, 0);
+			//assert(rc == 0);
 		}
 		void *buffer = malloc(PAGE_SIZE);
 		int rc = fileHandle.readPage(pageNum, buffer);
@@ -552,12 +516,12 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 
 	printRecord(recordDescriptor, (char *)buffer + pageOffset);
 
-	//modify the record to "delete" in the slot directory
+	//modify the record to "delete" in the slot directory, leave the rest unchanged
 	rc = fileHandle.setSlotDeleted(rid.pageNum, rid.slotNum);
 	assert(rc == 0);
 	//modify the slot length of the deleted record to 0
-	rc = fileHandle.updateSlotLen(rid.pageNum, rid.slotNum, 0);
-	assert(rc == 0);
+	//rc = fileHandle.updateSlotLen(rid.pageNum, rid.slotNum, 0);
+	//assert(rc == 0);
 
 	//add to the freespace of the page by the record length.
 	rc = fileHandle.addFreeBytes(rid.pageNum, dataLen);
@@ -573,32 +537,45 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 
 RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid)
 {
+	if(fileHandle.isSlotDeleted(rid.pageNum, rid.slotNum))
+		return -1;
+
+	int pageNum = rid.pageNum;
+	int slotNum = rid.slotNum;
+	int rc;
+	while(fileHandle.isSlotTombStone(pageNum, slotNum))
+	{
+		RID ridnext;
+		rc = fileHandle.getSlotTombStoneRID(pageNum, slotNum, ridnext);
+		pageNum = ridnext.pageNum;
+		slotNum = ridnext.slotNum;
+	}
 	//read record
 	void *buffer = malloc(PAGE_SIZE);
-	printf("\n####.....entering updateRecord(): page.%d, slot.%d\n", rid.pageNum, rid.slotNum);
-	int rc = fileHandle.readPage(rid.pageNum, buffer);
+	printf("\n####.....entering updateRecord(): page.%d, slot.%d\n", pageNum, slotNum);
+	rc = fileHandle.readPage(pageNum, buffer);
 	if(rc != 0){
-		printf("failed to read page: %d\n", rid.pageNum);
+		printf("failed to read page: %d\n", pageNum);
 	}
 
 	//modify the record to *data  1.get offset from rid,
-	int pageOffset = fileHandle.getOffset(rid.pageNum, rid.slotNum);
+	int pageOffset = fileHandle.getOffset(pageNum, slotNum);
 	printf("page offset is %d\n", pageOffset);
 
 	//2.get data length from attribute
 	int dataLen = getByteSize(recordDescriptor, data);
-	int dataLenOld = fileHandle.getLength(rid.pageNum, rid.slotNum);
+	int dataLenOld = fileHandle.getLength(pageNum, slotNum);
 	if(dataLenOld >= dataLen){
 		memcpy((char *)buffer + pageOffset, data, dataLen);
-		rc = fileHandle.updateSlotLen(rid.pageNum, rid.slotNum, dataLen);
+		rc = fileHandle.updateSlotLen(pageNum, slotNum, dataLen);
 		assert(rc == 0);
 
 		if(dataLenOld != dataLen){
-			rc = fileHandle.addFreeBytes(rid.pageNum, (dataLenOld-dataLen));
+			rc = fileHandle.addFreeBytes(pageNum, (dataLenOld-dataLen));
 			assert(rc == 0);
 		}
 		//write back
-		rc = fileHandle.writePage(rid.pageNum, buffer);
+		rc = fileHandle.writePage(pageNum, buffer);
 		assert(rc == 0);
 		return 0;
 	}
@@ -608,15 +585,15 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 
 	int spacePageEnd;
 
-	int freebytes = fileHandle.getFreeBytes(rid.pageNum);
+	int freebytes = fileHandle.getFreeBytes(pageNum);
 
 	if(freebytes >= dataLen){
 		//can insert into the same page
-		if(fileHandle.getLastSlotNum(rid.pageNum) == rid.slotNum){
+		if(fileHandle.getLastSlotNum(pageNum) == slotNum){
 			 spacePageEnd = PAGE_SIZE - pageOffset;
-			 printf("last slot, spaceOfPageENd=%d \n", spacePageEnd);
+			 printf("last slot, spaceOfPageEnd = %d \n", spacePageEnd);
 		}else{
-			int pageOffset_plus = fileHandle.getOffset(rid.pageNum, rid.slotNum+1);
+			int pageOffset_plus = fileHandle.getOffset(pageNum, slotNum+1);
 			spacePageEnd = pageOffset_plus - pageOffset;
 			printf("freespace=%d \n", spacePageEnd);
 		}
@@ -624,39 +601,43 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 		if(spacePageEnd >= dataLen){
 			//the original slot has available space
 			memcpy((char *)buffer + pageOffset, data, dataLen);
-			rc = fileHandle.updateSlotLen(rid.pageNum, rid.slotNum, dataLen);
+
+			rc = fileHandle.updateSlotLen(pageNum, slotNum, dataLen);
 			assert(rc == 0);
-			rc = fileHandle.reduceFreeBytes(rid.pageNum, (dataLen-dataLenOld));
+
+			assert(dataLenOld < dataLen);
+
+			rc = fileHandle.reduceFreeBytes(pageNum, (dataLen-dataLenOld));
 			assert(rc == 0);
 		}else{
 			//need to re-organize
-			rc = reorganizePage(fileHandle, recordDescriptor, rid.pageNum);
+			rc = reorganizePage(fileHandle, recordDescriptor, pageNum);
 			assert(rc == 0);
 
-			pageOffset = fileHandle.getEndPosition(rid.pageNum);
+			pageOffset = fileHandle.getEndPosition(pageNum);
 
 			//check if there is enough space in page this time
 			assert((PAGE_SIZE-pageOffset) >= dataLen);
 			memcpy((char *)buffer + pageOffset, data, dataLen);
 
 			//append a new slot to the end of page
-			rc = fileHandle.appendSlot(rid.pageNum, dataLen);
+			rc = fileHandle.appendSlot(pageNum, dataLen);
 			assert(rc == 0);
 
-			rc = fileHandle.reduceFreeBytes(rid.pageNum, dataLen);
+			rc = fileHandle.reduceFreeBytes(pageNum, dataLen);
 			assert(rc == 0);
 
-			rc = fileHandle.setSlotTombStone(rid.pageNum, rid.slotNum);
+			rc = fileHandle.setSlotTombStone(pageNum, slotNum);
 			assert(rc == 0);
 			RID tombStoneRID;
-			tombStoneRID.pageNum = rid.pageNum;
-			tombStoneRID.slotNum = fileHandle.getLastSlotNum(rid.pageNum);
+			tombStoneRID.pageNum = pageNum;
+			tombStoneRID.slotNum = fileHandle.getLastSlotNum(pageNum);
 
-			rc = fileHandle.setSlotTombStoneRID(rid.pageNum, rid.slotNum, tombStoneRID);
+			rc = fileHandle.setSlotTombStoneRID(pageNum, slotNum, tombStoneRID);
 			assert(rc == 0);
 		}
 		//write back
-		rc = fileHandle.writePage(rid.pageNum, buffer);
+		rc = fileHandle.writePage(pageNum, buffer);
 		assert(rc == 0);
 
 	}else{
@@ -666,10 +647,10 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 		rc = insertRecord(fileHandle, recordDescriptor, data, tombStoneRID);
 		assert(rc == 0);
 		//set new rid
-		rc = fileHandle.setSlotTombStone(rid.pageNum, rid.slotNum);
+		rc = fileHandle.setSlotTombStone(pageNum, slotNum);
 		assert(rc == 0);
 
-		rc = fileHandle.setSlotTombStoneRID(rid.pageNum, rid.slotNum, tombStoneRID);
+		rc = fileHandle.setSlotTombStoneRID(pageNum, slotNum, tombStoneRID);
 		assert(rc == 0);
 	}
 
@@ -677,11 +658,11 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 
 
 	//modify the data length in slot directory of rid
-	rc = fileHandle.updateSlotLen(rid.pageNum, rid.slotNum, dataLen);
-	assert(rc == 0);
+//	rc = fileHandle.updateSlotLen(rid.pageNum, rid.slotNum, dataLen);
+//	assert(rc == 0);
 
 	//write back
-	rc = fileHandle.writePage(rid.pageNum, buffer);
+	rc = fileHandle.writePage(pageNum, buffer);
 	assert(rc == 0);
 
 	return 0;
@@ -756,46 +737,62 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
 }
 
 
-RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNumber)
+RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNum)
 {
 	//read
 	void *buffer = malloc(PAGE_SIZE);
-	printf("\n.....entering reorganizePage(): page.%d \n", pageNumber);
-	int rc = fileHandle.readPage(pageNumber, buffer);
+	printf("\n.....entering reorganizePage(): page.%d \n", pageNum);
+	int rc = fileHandle.readPage(pageNum, buffer);
 	if (rc != 0) {
-		printf("failed to read page: %d\n", pageNumber);
+		printf("failed to read page: %d\n", pageNum);
 	}
 
 	//re-organize
-	int maxSlotNum = fileHandle.getLastSlotNum(pageNumber);
+	int maxSlotNum = fileHandle.getLastSlotNum(pageNum);
 	int shiftSize = 0;
+
 	for(int slotNum = 0; slotNum < maxSlotNum; slotNum++)
 	{
-		int offset = fileHandle.getOffset(pageNumber, slotNum);
-		int len = fileHandle.getLength(pageNumber, slotNum);
+		int offset = fileHandle.getOffset(pageNum, slotNum);
+		int offset_next = fileHandle.getOffset(pageNum, slotNum+1);
 
-		int offset_plus = fileHandle.getOffset(pageNumber, slotNum+1);
-		int len_plus = fileHandle.getLength(pageNumber, slotNum+1);
+		int len = fileHandle.getLength(pageNum, slotNum);
+		int len_next = fileHandle.getLength(pageNum, slotNum+1);
 
-		//modify the shftsize of the following slot
-		if((offset_plus - offset) > len){
-			shiftSize += offset_plus - offset - len;
+		if(fileHandle.isSlotDeleted(pageNum, slotNum)){
+			//shiftSize = (offset_next - offset);
+			//modify the slot offset in slot directory
+			memcpy((char *)buffer + offset, (char *)buffer + offset_next, len_next);
+			rc = fileHandle.updateSlotOffset(pageNum, slotNum + 1, offset);
+		}else{
+			if((offset_next - offset) < len){
+				printf("offset_next: %d\t, offset: %d, len: %d",offset_next, offset, len);
+			}
+			assert((offset_next - offset) >= len);
+			shiftSize = (offset_next - offset - len);
+			if(shiftSize>0){
+				//modify the slot offset in slot directory
+				rc = fileHandle.updateSlotOffset(pageNum, slotNum + 1, offset + len);
+
+				//move the data in page
+				memcpy((char *)buffer + offset + len , (char *)buffer + offset_next, len_next);
+			}
 		}
 
-		if(shiftSize > 0)
+		/*if(shiftSize > 0)
 		{
 			//modify the slot offset in slot directory
-			rc = fileHandle.updateSlotOffset(pageNumber, slotNum+1, offset_plus-shiftSize);
+			rc = fileHandle.updateSlotOffset(pageNum, slotNum + 1, offset_next - shiftSize);
 
 			//move the data in page
-			memcpy((char *)buffer + offset_plus -shiftSize, (char *)buffer + offset_plus, len_plus);
-		}
+			memcpy((char *)buffer + offset_next - shiftSize, (char *)buffer + offset_next, len_next);
+		}*/
 
 	}
 
 
 	//write back
-	rc = fileHandle.writePage(pageNumber, buffer);
+	rc = fileHandle.writePage(pageNum, buffer);
 	assert(rc == 0);
 
 	return 0;
@@ -825,7 +822,7 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	int slotNum;
 
 	int type;
-	int valuelen = 0;
+//	int valuelen = 0;
 
 
 	if(conditionAttribute=="" || compOp == NO_OP){

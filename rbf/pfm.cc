@@ -128,7 +128,7 @@ const bool SlotDirectoryNode::isDeleted()
 
 SlotDirectory::SlotDirectory()
 {
-	printf("clss SlotDirectory size: %ld\n", sizeof(SlotDirectory));
+//	printf("clss SlotDirectory size: %ld\n", sizeof(SlotDirectory));
 	pageNum = -1;
 	//psList = NULL;
 //	curr = NULL;
@@ -531,12 +531,12 @@ RC FileHandle::setPageInfo(FILE *p)
 
 RC FileHandle::readPageInfo()
 {
-	printf("......entering readPageInfo......\n");
+//	printf("......entering readPageInfo......\n");
 	int offset = 0;
 	fseek(pageInfo, offset, SEEK_SET);
 	fread(&pageMaxNum, sizeof(unsigned), 1, pageInfo);
 	offset += sizeof(unsigned);
-	printf("pageMaxNum: %d\n", pageMaxNum);
+	//printf("pageMaxNum: %d\n", pageMaxNum);
 
 	fbList.clear();
 	pageSlotDirectory.clear();
@@ -546,7 +546,7 @@ RC FileHandle::readPageInfo()
 		fread(fb, sizeof(FreeBytes), 1, pageInfo);
 		fbList.push_back(fb);
 		offset += sizeof(FreeBytes);
-		printf(" %d, page: %d free bytes: %d\n", i, fb->getPageNum(), fb->getFreeBytes());
+		//printf(" %d, page: %d free bytes: %d\n", i, fb->getPageNum(), fb->getFreeBytes());
 	}
 
 	for (int i = 0; i < pageMaxNum + 1; i++) {
@@ -557,14 +557,14 @@ RC FileHandle::readPageInfo()
 		fread(&pageNum, sizeof(int), 1, pageInfo);
 		sd->setPageNum(pageNum);
 		offset += sizeof(int);
-		printf("page number: %d \t", pageNum);
+		//printf("page number: %d \t", pageNum);
 
 		fseek(pageInfo, offset, SEEK_SET);
 		int lastSlotNum; //= sd->getLastSlotNum();
 		fread(&lastSlotNum, sizeof(int), 1, pageInfo);
 		sd->setLastSlotNum(lastSlotNum);
 		offset += sizeof(int);
-		printf("last slot number: %d\n", lastSlotNum);
+		//printf("last slot number: %d\n", lastSlotNum);
 
 		for (int j = 0; j < lastSlotNum + 1; j++)
 		{
@@ -574,7 +574,7 @@ RC FileHandle::readPageInfo()
 			fread(p, sizeof(SlotDirectoryNode), 1, pageInfo);
 			sd->appendSlotNode(p);
 			offset += sizeof(SlotDirectoryNode);
-			printf("slot: %d, offset: %d\n", j, p->getSlotOffset());
+			//printf("slot: %d, offset: %d, length:%d \n", j, p->getSlotOffset(), p->getSlotLength());
 		}
 
 		pageSlotDirectory.push_back(sd);
@@ -585,12 +585,12 @@ RC FileHandle::readPageInfo()
 
 RC FileHandle::savePageInfo()
 {
-	printf("......entering savePageInfo......\n");
+//	printf("......entering savePageInfo......\n");
 	int offset = 0;
 	fseek(pageInfo, offset, SEEK_SET);
 	fwrite(&pageMaxNum, sizeof(unsigned), 1, pageInfo);
 	offset += sizeof(unsigned);
-	printf("pageMaxNum: %d\n", pageMaxNum);
+//	printf("pageMaxNum: %d\n", pageMaxNum);
 
 	for(int i=0; i<pageMaxNum+1; i++)
 	{
@@ -598,7 +598,7 @@ RC FileHandle::savePageInfo()
 		fseek(pageInfo, offset, SEEK_SET);
 		fwrite(fb, sizeof(FreeBytes), 1, pageInfo);
 		offset += sizeof(FreeBytes);
-		printf(" %d, page: %d free bytes: %d\n", i, fb->getPageNum(), fb->getFreeBytes());
+//		printf(" %d, page: %d free bytes: %d\n", i, fb->getPageNum(), fb->getFreeBytes());
 	}
 
 	for(int i=0; i<pageMaxNum+1; i++)
@@ -608,13 +608,13 @@ RC FileHandle::savePageInfo()
 		unsigned pageNum = sd->getPageNum();
 		fwrite(&pageNum, sizeof(unsigned), 1, pageInfo);
 		offset += sizeof(unsigned);
-		printf("page number: %d \t", pageNum);
+//		printf("page number: %d \t", pageNum);
 
 		fseek(pageInfo, offset, SEEK_SET);
 		unsigned lastSlotNum = sd->getLastSlotNum();
 		fwrite(&lastSlotNum, sizeof(unsigned), 1, pageInfo);
 		offset += sizeof(unsigned);
-		printf("last slot number: %d\n", lastSlotNum);
+//		printf("last slot number: %d\n", lastSlotNum);
 
 		for(int j=0;j<sd->getLastSlotNum()+1;j++)
 		{
@@ -623,7 +623,7 @@ RC FileHandle::savePageInfo()
 			fwrite(p, sizeof(SlotDirectoryNode), 1, pageInfo);
 			offset += sizeof(SlotDirectoryNode);
 
-			printf("slot: %d, offset: %d\n", j, p->getSlotOffset());
+//			printf("slot: %d, offset: %d\n", j, p->getSlotOffset());
 
 		}
 

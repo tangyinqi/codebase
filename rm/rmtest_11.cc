@@ -24,7 +24,16 @@ void TEST_RM_11(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
         prepareLargeTuple(i+10, tuple, &size);
         rc = rm->updateTuple(tableName, tuple, rid);
+        
         assert(rc == success);
+        rc = rm->readTuple(tableName, rid, returnedData);
+        assert(rc == success);
+          
+		if(memcmp(returnedData, tuple, size) != 0)
+		{
+			cout << "****Test case 11 failed****" << endl << endl;
+			return;
+		}
 
         sizes[i] = size;
         rids[i] = rid;
