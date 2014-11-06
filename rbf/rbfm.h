@@ -86,6 +86,7 @@ public:
 
 class RecordBasedFileManager
 {
+private: int reorganize_count =0;
 public:
   static RecordBasedFileManager* instance();
 

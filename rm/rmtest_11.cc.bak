@@ -17,7 +17,7 @@ void TEST_RM_11(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
     // Update the first 1000 tuples
     int size = 0;
-    for(int i = 0; i < 100; i++)
+    for(int i = 0; i < numTuples; i++)
     {
         memset(tuple, 0, 1000);
         RID rid = rids[i];
@@ -41,7 +41,7 @@ void TEST_RM_11(const string &tableName, vector<RID> &rids, vector<int> &sizes)
     cout << "Updated!" << endl;
 
     // Read the recrods out and check integrity
-    for(int i = 0; i < 100; i++)
+    for(int i = 0; i < numTuples; i++)
     {
         memset(tuple, 0, 1000);
         memset(returnedData, 0, 1000);

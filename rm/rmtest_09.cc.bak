@@ -9,7 +9,7 @@ void TEST_RM_9(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
     RID rid; 
     void *tuple = malloc(1000);
-    int numTuples = 200;
+    int numTuples = 2000;
 
     // GetAttributes
     vector<Attribute> attrs;

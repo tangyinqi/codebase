@@ -252,7 +252,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	memset(buffer, 0, PAGE_SIZE);
 
 	if(pageNum==-1){
-
+		//append to a new page
 		memset(buffer, 0, PAGE_SIZE);
 		memcpy((char *)buffer, data, bytesNeed);
 
@@ -267,10 +267,10 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 //		assert(rc == 0);
 		int pNum = fileHandle.getNumberOfPages()-1;
 
-		rc = fileHandle.reset(pNum);
-		assert(rc==0);
-		unsigned x = fileHandle.getFreeBytes(pNum);
+//		rc = fileHandle.reset(pNum);
+//		assert(rc==0);
 
+		unsigned x = fileHandle.getFreeBytes(pNum);
 		printf("left FreeByes in %d is %d\n", pNum, x);
 
 		rc = fileHandle.reduceFreeBytes(fileHandle.getNumberOfPages()-1, bytesNeed);
@@ -284,29 +284,28 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 
 		printf("appendPage, record inserted!\n");
 
-
-
 	}else{
+		//append to a found page
 		rid.pageNum = pageNum;
 		rc = fileHandle.readPage(pageNum,  buffer);
 		if(rc != 0)return rc;
 
-		int slotNum = fileHandle.lookforSlot(pageNum, bytesNeed);
+		//int slotNum = fileHandle.lookforSlot(pageNum, bytesNeed);
 
-		if(slotNum ==-1){
-
+		//if(slotNum ==-1){
+			//append to the last slot of this page
 			int offset = fileHandle.getEndPosition(pageNum);
-			int freeBytes = PAGE_SIZE - offset;
-			if(freeBytes >= bytesNeed){
+			//int freeBytes = PAGE_SIZE - offset;
+			//if(freeBytes >= bytesNeed){
 				//append to page
 				memcpy((char *)buffer + offset, (char *)data,  bytesNeed);
-			}else{
+		/*	}else{
 				//re-organize page, then insert.
 				printf("re-organize a page!\n");
 				reorganizePage(fileHandle, recordDescriptor, pageNum);
 				offset = fileHandle.getEndPosition(pageNum);
 				memcpy((char *)buffer + offset, (char *)data,  bytesNeed);
-			}
+			}*/
 			rc = fileHandle.reduceFreeBytes(pageNum, bytesNeed);
 			if (rc != 0)
 				return rc;
@@ -320,7 +319,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 			printf("record appended to the end of the slots in a page!\n");
 			printRecord(recordDescriptor, (char *) buffer + offset);
 
-		}else{
+		/*}else{
 			//insert into the slot
 			rid.slotNum = slotNum;
 			//??????
@@ -333,10 +332,11 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 			int offset = fileHandle.getOffset(pageNum, slotNum);
 			memcpy((char *)buffer + offset, (char *)data,  bytesNeed);
 
-			/**modify the slotDir to (offset, bytesNeed), for page PageNum**/
+			//modify the slotDir to (offset, bytesNeed), for page PageNum
 			rc = fileHandle.updateSlotLen(pageNum,slotNum, bytesNeed);
 			if(rc != 0)return rc;
-		}
+		}*/
+
 		printf("write back to page \n\n");
 		rc = fileHandle.writePage(pageNum, buffer);
 
@@ -355,8 +355,10 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 		printf("####SLOT DELETED!###\n");
 		return -2000;
 	}
-	if((rid.pageNum+1>fileHandle.getNumberOfPages()) && (rid.slotNum > fileHandle.getLastSlotNum(rid.pageNum)))
+	if((rid.pageNum+1>fileHandle.getNumberOfPages()) && (rid.slotNum > fileHandle.getLastSlotNum(rid.pageNum))){
+		printf("####rid exceed the bound!");
 		return -1;
+	}
 	int pNum = rid.pageNum;
 	int sNum = rid.slotNum;
 
@@ -367,6 +369,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 		assert(rc==0);
 		pNum = ridNext.pageNum;
 		sNum = ridNext.slotNum;
+		printf("tombStone: ridNext:%d, %d", pNum, sNum);
 	}
 
 
@@ -378,13 +381,13 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 		return -1001;
 	}
 
-//	printf("****** before reading......\n");
+	printf("****** before reading......\n");
 
 	int pageOffset = fileHandle.getOffset(pNum, sNum);
-//	printf("page offset is %d\n", pageOffset);
-	/*if(recordDescriptor.size() != 0){
+	printf("page offset is %d\n", pageOffset);
+	if(recordDescriptor.size() != 0){
 		printRecord(recordDescriptor, (char *)buffer + pageOffset);
-	}*/
+	}
 
 
 	Attribute attr;
@@ -394,10 +397,10 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 
 
 	memcpy(data, (char *)buffer + pageOffset, bufferLen);
-	/*printf("****** after memcpying......\n");
+	printf("****** after memcpying......\n");
 	if(recordDescriptor.size() != 0){
 		printRecord(recordDescriptor, data);
-	}*/
+	}
 
 	// testing
 	printf("\n*********  after reading: ******\n");
@@ -480,6 +483,10 @@ RC RecordBasedFileManager::deleteRecords(FileHandle &fileHandle)
 		rc = fileHandle.reset(pageNum);
 		assert(rc == 0);
 		//write back
+
+		rc = fileHandle.savePageInfo();
+		assert(rc == 0);
+
 		rc = fileHandle.writePage(pageNum, buffer);
 		assert(rc == 0);
 		free(buffer);
@@ -565,7 +572,9 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 	//2.get data length from attribute
 	int dataLen = getByteSize(recordDescriptor, data);
 	int dataLenOld = fileHandle.getLength(pageNum, slotNum);
+
 	if(dataLenOld >= dataLen){
+		//insert into the original slot
 		memcpy((char *)buffer + pageOffset, data, dataLen);
 		rc = fileHandle.updateSlotLen(pageNum, slotNum, dataLen);
 		assert(rc == 0);
@@ -575,49 +584,88 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 			assert(rc == 0);
 		}
 		//write back
+		rc = fileHandle.savePageInfo();
+		assert(rc ==0);
 		rc = fileHandle.writePage(pageNum, buffer);
 		assert(rc == 0);
 		return 0;
 	}
-	//the following situation: dataLen> dataLenOld
-	//check if there enough space between offset of rid.slotNum and offset of rid.slotNum+1
-	// if slotNum is the last slot.
 
-	int spacePageEnd;
 
+	int spacePageEnd = PAGE_SIZE - fileHandle.getEndPosition(pageNum);
+	int oldSlotSpace;
 	int freebytes = fileHandle.getFreeBytes(pageNum);
 
+	if(spacePageEnd >= dataLen){
+		//update to the end of a page
+		pageOffset = fileHandle.getEndPosition(pageNum);
+		memcpy((char *) buffer + pageOffset, data, dataLen);
+		rc = fileHandle.appendSlot(pageNum, dataLen);
+		assert(rc == 0);
+
+		rc = fileHandle.reduceFreeBytes(pageNum, dataLen);
+		assert(rc == 0);
+
+		rc = fileHandle.setSlotTombStone(pageNum, slotNum);
+		assert(rc == 0);
+		RID tombStoneRID;
+		tombStoneRID.pageNum = pageNum;
+		tombStoneRID.slotNum = fileHandle.getLastSlotNum(pageNum);
+
+		rc = fileHandle.setSlotTombStoneRID(pageNum, slotNum, tombStoneRID);
+		assert(rc == 0);
+	}else{
+		//have to be migrated to a different page!
+		//migrate: insert the record into a slot with available space size,
+		RID tombStoneRID;
+		rc = insertRecord(fileHandle, recordDescriptor, data, tombStoneRID);
+		assert(rc == 0);
+		//set new rid
+		rc = fileHandle.setSlotTombStone(pageNum, slotNum);
+		assert(rc == 0);
+
+		rc = fileHandle.setSlotTombStoneRID(pageNum, slotNum, tombStoneRID);
+		assert(rc == 0);
+
+	}
+	/*
 	if(freebytes >= dataLen){
 		//can insert into the same page
 		if(fileHandle.getLastSlotNum(pageNum) == slotNum){
-			 spacePageEnd = PAGE_SIZE - pageOffset;
-			 printf("last slot, spaceOfPageEnd = %d \n", spacePageEnd);
+			oldSlotSpace = PAGE_SIZE - pageOffset;
+			 printf("last slot, spaceOfPageEnd = %d \n", oldSlotSpace);
 		}else{
 			int pageOffset_plus = fileHandle.getOffset(pageNum, slotNum+1);
-			spacePageEnd = pageOffset_plus - pageOffset;
-			printf("freespace=%d \n", spacePageEnd);
+			oldSlotSpace = pageOffset_plus - pageOffset;
+			printf("oldSlotSpace=%d , dataLen=%d\n", oldSlotSpace, dataLen);
 		}
 
-		if(spacePageEnd >= dataLen){
+		if(oldSlotSpace >= dataLen){
 			//the original slot has available space
 			memcpy((char *)buffer + pageOffset, data, dataLen);
 
 			rc = fileHandle.updateSlotLen(pageNum, slotNum, dataLen);
 			assert(rc == 0);
-
 			assert(dataLenOld < dataLen);
 
 			rc = fileHandle.reduceFreeBytes(pageNum, (dataLen-dataLenOld));
 			assert(rc == 0);
 		}else{
-			//need to re-organize
-			rc = reorganizePage(fileHandle, recordDescriptor, pageNum);
-			assert(rc == 0);
-
+			//the end of the page
 			pageOffset = fileHandle.getEndPosition(pageNum);
+			spacePageEnd = PAGE_SIZE-pageOffset;
+			if(spacePageEnd < dataLen){
+				//need to re-organize
+				printf("####### spacePageEnd=%d, dataLen=%d. need to reorganize Page", spacePageEnd, dataLen);
+				rc = reorganizePage(fileHandle, recordDescriptor, pageNum);
+				assert(rc == 0);
 
-			//check if there is enough space in page this time
-			assert((PAGE_SIZE-pageOffset) >= dataLen);
+				pageOffset = fileHandle.getEndPosition(pageNum);
+				spacePageEnd = PAGE_SIZE-spacePageEnd;
+				//check if there is enough space in page this time
+				assert(spacePageEnd >= dataLen);
+			}
+
 			memcpy((char *)buffer + pageOffset, data, dataLen);
 
 			//append a new slot to the end of page
@@ -637,8 +685,8 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 			assert(rc == 0);
 		}
 		//write back
-		rc = fileHandle.writePage(pageNum, buffer);
-		assert(rc == 0);
+//		rc = fileHandle.writePage(pageNum, buffer);
+//		assert(rc == 0);
 
 	}else{
 		//have to be migrated to a different page!
@@ -654,7 +702,7 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 		assert(rc == 0);
 	}
 
-
+*/
 
 
 	//modify the data length in slot directory of rid
@@ -662,6 +710,9 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 //	assert(rc == 0);
 
 	//write back
+	rc = fileHandle.savePageInfo();
+	assert(rc ==0);
+
 	rc = fileHandle.writePage(pageNum, buffer);
 	assert(rc == 0);
 
@@ -740,7 +791,10 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
 RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const unsigned pageNum)
 {
 	//read
-	void *buffer = malloc(PAGE_SIZE);
+	void *buffer = (void *)malloc(PAGE_SIZE);
+	void *bufferNew = (void *)malloc(PAGE_SIZE);
+	memset(bufferNew, 0, PAGE_SIZE);
+
 	printf("\n.....entering reorganizePage(): page.%d \n", pageNum);
 	int rc = fileHandle.readPage(pageNum, buffer);
 	if (rc != 0) {
@@ -751,6 +805,20 @@ RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<A
 	int maxSlotNum = fileHandle.getLastSlotNum(pageNum);
 	int shiftSize = 0;
 
+
+	if(pageNum==3){
+		reorganize_count++;
+		printf("#### before re-organize: page Num is 3! No.%d time!\n", reorganize_count);
+		for(int slotNum = 0; slotNum <= maxSlotNum; slotNum++)
+		{
+			int dataOff = fileHandle.getOffset(pageNum, slotNum);
+			int res = printRecord(recordDescriptor, (char *) buffer + dataOff);
+			assert(res==0);
+		}
+		printf("\n");
+	}
+
+
 	for(int slotNum = 0; slotNum < maxSlotNum; slotNum++)
 	{
 		int offset = fileHandle.getOffset(pageNum, slotNum);
@@ -760,17 +828,23 @@ RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<A
 		int len_next = fileHandle.getLength(pageNum, slotNum+1);
 
 		if(fileHandle.isSlotDeleted(pageNum, slotNum)){
-			//shiftSize = (offset_next - offset);
-			//modify the slot offset in slot directory
-			memcpy((char *)buffer + offset, (char *)buffer + offset_next, len_next);
-			rc = fileHandle.updateSlotOffset(pageNum, slotNum + 1, offset);
+			//if(offset_next != offset){
+				printf("###offset_next: %d\t, offset: %d, len: %d\n",offset_next, offset, len);
+				printf("###slot %d is deleted!", slotNum);
+				//shiftSize = (offset_next - offset);
+				//modify the slot offset in slot directory
+				memcpy((char *)buffer + offset, (char *)buffer + offset_next, len_next);
+				rc = fileHandle.updateSlotOffset(pageNum, slotNum + 1, offset);
+			//}
 		}else{
+			printf("###offset_next: %d\t, offset: %d, len: %d\n",offset_next, offset, len);
 			if((offset_next - offset) < len){
-				printf("offset_next: %d\t, offset: %d, len: %d",offset_next, offset, len);
+				//printf("###offset_next: %d\t, offset: %d, len: %d\n",offset_next, offset, len);
 			}
 			assert((offset_next - offset) >= len);
 			shiftSize = (offset_next - offset - len);
 			if(shiftSize>0){
+				printf("####### slot %d will be shift!", slotNum+1);
 				//modify the slot offset in slot directory
 				rc = fileHandle.updateSlotOffset(pageNum, slotNum + 1, offset + len);
 
@@ -789,9 +863,25 @@ RC RecordBasedFileManager::reorganizePage(FileHandle &fileHandle, const vector<A
 		}*/
 
 	}
+	//memcpy(buffer, buffer, PAGE_SIZE);
+
+	if(pageNum==3){
+		reorganize_count++;
+		printf("#### page Num is 3! No.%d time!\n", reorganize_count);
+		for(int slotNum = 0; slotNum <= maxSlotNum; slotNum++)
+		{
+			int dataOff = fileHandle.getOffset(pageNum, slotNum);
+			int res = printRecord(recordDescriptor, (char *) buffer + dataOff);
+			assert(res==0);
+		}
+		exit(-1);
+	}
 
 
 	//write back
+//	rc = fileHandle.savePageInfo();
+//	assert(rc == 0);
+
 	rc = fileHandle.writePage(pageNum, buffer);
 	assert(rc == 0);
 
@@ -873,14 +963,14 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 		}
 	}
 
-	bool found = false;//if the record satisfies the requirement.
+
 
 	//retrieve each record in the file
 	for(pageNum=0; pageNum<fileHandle.getNumberOfPages(); pageNum ++)
 	{
 		for(slotNum=0; slotNum <= fileHandle.getLastSlotNum(pageNum); slotNum++)
 		{
-
+			bool found = false;//if the record satisfies the requirement.
 			if (!fileHandle.isSlotDeleted(pageNum, slotNum)) {
 				RID rid;
 				if (fileHandle.isSlotTombStone(pageNum, slotNum)) {
@@ -894,40 +984,40 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 				//check if data satisfies the requirement
 				if (type == 0) {
 					int conditionAttributeData;
-					readAttribute(fileHandle, recordDescriptor, rid,
-							conditionAttribute, &conditionAttributeData);
-					printf("conditionAttributeData: %d\n",
-							conditionAttributeData);
-					int *attriValue = (int *) value;
+					readAttribute(fileHandle, recordDescriptor, rid,conditionAttribute, &conditionAttributeData);
+					int attriValue;
+					memcpy(&attriValue, (char *)value, sizeof(int));
+					printf("conditionAttributeData: %d, value=%d\n", conditionAttributeData, attriValue);
+
 
 					switch (compOp) {
 					case EQ_OP:
-						if (*attriValue == conditionAttributeData) {
+						if (conditionAttributeData == attriValue ) {
 							found = true;
 						}
 						break;
 					case LT_OP:
-						if (*attriValue < conditionAttributeData) {
+						if (conditionAttributeData < attriValue) {
 							found = true;
 						}
 						break;
 					case GT_OP:
-						if (*attriValue > conditionAttributeData) {
+						if (conditionAttributeData > attriValue) {
 							found = true;
 						}
 						break;
 					case LE_OP:
-						if (*attriValue <= conditionAttributeData) {
+						if (conditionAttributeData <= attriValue) {
 							found = true;
 						}
 						break;
 					case GE_OP:
-						if (*attriValue >= conditionAttributeData) {
+						if (conditionAttributeData >= attriValue) {
 							found = true;
 						}
 						break;
 					case NE_OP:
-						if (*attriValue != conditionAttributeData) {
+						if (conditionAttributeData != attriValue) {
 							found = true;
 						}
 						break;
@@ -937,40 +1027,40 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 					}
 				} else if (type == 1) {
 					float conditionAttributeData;
-					readAttribute(fileHandle, recordDescriptor, rid,
-							conditionAttribute, &conditionAttributeData);
-					printf("conditionAttributeData: %f\n",
-							conditionAttributeData);
-					float *attriValue = (float *) value;
+					readAttribute(fileHandle, recordDescriptor, rid, conditionAttribute, &conditionAttributeData);
+
+					float attriValue;
+					memcpy(&attriValue, (char *)value, sizeof(float));
+					printf("conditionAttributeData: %f, \n", conditionAttributeData);
 
 					switch (compOp) {
 					case EQ_OP:
-						if (*attriValue == conditionAttributeData) {
+						if (conditionAttributeData == attriValue) {
 							found = true;
 						}
 						break;
 					case LT_OP:
-						if (*attriValue < conditionAttributeData) {
+						if (conditionAttributeData < attriValue) {
 							found = true;
 						}
 						break;
 					case GT_OP:
-						if (*attriValue > conditionAttributeData) {
+						if (conditionAttributeData > attriValue) {
 							found = true;
 						}
 						break;
 					case LE_OP:
-						if (*attriValue <= conditionAttributeData) {
+						if (conditionAttributeData <= attriValue) {
 							found = true;
 						}
 						break;
 					case GE_OP:
-						if (*attriValue >= conditionAttributeData) {
+						if (conditionAttributeData >= attriValue) {
 							found = true;
 						}
 						break;
 					case NE_OP:
-						if (*attriValue != conditionAttributeData) {
+						if (conditionAttributeData != attriValue) {
 							found = true;
 						}
 						break;
@@ -980,40 +1070,39 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 					}
 				} else {
 					char *conditionAttributeData = (char *) malloc(30);
-					readAttribute(fileHandle, recordDescriptor, rid,
-							conditionAttribute, conditionAttributeData);
-					printf("conditionAttributeData: %s\n",
-							conditionAttributeData);
+					memset((char *)conditionAttributeData, '\0', 30);
+					readAttribute(fileHandle, recordDescriptor, rid,conditionAttribute, conditionAttributeData);
 					char *attriValue = (char *) value;
 
+					printf("conditionAttributeData: %s, value %s\n", conditionAttributeData, attriValue);
 					switch (compOp) {
 					case EQ_OP:
-						if (strcmp(attriValue, conditionAttributeData) == 0) {
+						if(strcmp(attriValue, conditionAttributeData) == 0) {
 							found = true;
 						}
 						break;
 					case LT_OP:
-						if (strcmp(attriValue, conditionAttributeData) < 0) {
+						if(strcmp(attriValue, conditionAttributeData) < 0) {
 							found = true;
 						}
 						break;
 					case GT_OP:
-						if (strcmp(attriValue, conditionAttributeData) > 0) {
+						if(strcmp(attriValue, conditionAttributeData) > 0) {
 							found = true;
 						}
 						break;
 					case LE_OP:
-						if (strcmp(attriValue, conditionAttributeData) <= 0) {
+						if(strcmp(attriValue, conditionAttributeData) <= 0) {
 							found = true;
 						}
 						break;
 					case GE_OP:
-						if (strcmp(attriValue, conditionAttributeData) >= 0) {
+						if(strcmp(attriValue, conditionAttributeData) >= 0) {
 							found = true;
 						}
 						break;
 					case NE_OP:
-						if (strcmp(attriValue, conditionAttributeData) != 0) {
+						if(strcmp(attriValue, conditionAttributeData) != 0) {
 							found = true;
 						}
 						break;
