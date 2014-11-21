@@ -51,10 +51,7 @@ int main()
     vector<RID> rids;
     vector<int> sizes;
     
-	remove("tbl_employee4");
-	
-    // Create Table tbl_employee4
-    createLargeTable("tbl_employee4");
+
 	// Insert Tuple
     TEST_RM_9("tbl_employee4", rids, sizes);
 

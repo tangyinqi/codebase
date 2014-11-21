@@ -9,16 +9,6 @@
 //#include <assert.h>
 #include <string>
 
-/******************   helper method   **********************/
-// Check if a file exists
-bool FileExists(const char *fileName)
-{
-    struct stat stFileInfo;
-
-    if(stat(fileName, &stFileInfo) == 0) return true;
-    else return false;
-}
-
 
 
 /*******************    implementation of class PageSlotDirectory   *************************/
@@ -76,10 +66,10 @@ RC SlotDirectoryNode::updateSlotOffset(int offset)
 
 void SlotDirectoryNode::setSlotDir(int off, int len)
 {
-	printf("......entering setSlotDir()......\n");
+//	printf("......entering setSlotDir()......\n");
 	ptr.offset = off;
 	ptr.length = len;
-	printf("offset:%d, length:%d\n", ptr.offset, ptr.length);
+//	printf("offset:%d, length:%d\n", ptr.offset, ptr.length);
 }
 
 RC SlotDirectoryNode::setTombStone()
@@ -208,7 +198,7 @@ const int SlotDirectory::lookforSlotNum(int bytesNeed)
 	for(int i=0; i < psList.size(); i++)
 	{
 		p = psList[i];
-		if(p->isDeleted() && (p->getSlotLength() >= bytesNeed))
+		if(p->isDeleted() && (!p->isTombStone()) && (p->getSlotLength() >= bytesNeed))
 		{
 			return i;
 		}
@@ -484,7 +474,14 @@ FileHandle::FileHandle()
 {
 	pFile = NULL;
 	pageMaxNum = -1;
+	topBuffer = 0;
+	//bufferDict = new hash_map<unsigned, unsigned>();
 	//curr = NULL;
+	for(int i=0;i<100;i++){
+		isClean[i] = true;
+		memset(pageBuffer[i], 0, PAGE_SIZE);
+	}
+
 }
 
 /*FileHandle::FileHandle(const char *fileName)
@@ -508,10 +505,14 @@ FileHandle::~FileHandle()
 	if(fbList.size() != 0){
 		fbList.clear();
 	}
+
+
 }
 
 RC FileHandle::closeHandle()
 {
+	//before close handle, write back the buffer
+	bufferFlush();
 	fclose(pageInfo);
 	fclose(pFile);
 	return 0;
@@ -531,7 +532,7 @@ RC FileHandle::setPageInfo(FILE *p)
 
 RC FileHandle::readPageInfo()
 {
-//	printf("......entering readPageInfo......\n");
+	//printf("......entering readPageInfo......\n");
 	int offset = 0;
 	fseek(pageInfo, offset, SEEK_SET);
 	fread(&pageMaxNum, sizeof(unsigned), 1, pageInfo);
@@ -585,12 +586,12 @@ RC FileHandle::readPageInfo()
 
 RC FileHandle::savePageInfo()
 {
-//	printf("......entering savePageInfo......\n");
+	//printf("......entering savePageInfo......\n");
 	int offset = 0;
 	fseek(pageInfo, offset, SEEK_SET);
 	fwrite(&pageMaxNum, sizeof(unsigned), 1, pageInfo);
 	offset += sizeof(unsigned);
-//	printf("pageMaxNum: %d\n", pageMaxNum);
+	//printf("pageMaxNum: %d\n", pageMaxNum);
 
 	for(int i=0; i<pageMaxNum+1; i++)
 	{
@@ -598,7 +599,7 @@ RC FileHandle::savePageInfo()
 		fseek(pageInfo, offset, SEEK_SET);
 		fwrite(fb, sizeof(FreeBytes), 1, pageInfo);
 		offset += sizeof(FreeBytes);
-//		printf(" %d, page: %d free bytes: %d\n", i, fb->getPageNum(), fb->getFreeBytes());
+		//printf(" %d, page: %d free bytes: %d\n", i, fb->getPageNum(), fb->getFreeBytes());
 	}
 
 	for(int i=0; i<pageMaxNum+1; i++)
@@ -608,13 +609,13 @@ RC FileHandle::savePageInfo()
 		unsigned pageNum = sd->getPageNum();
 		fwrite(&pageNum, sizeof(unsigned), 1, pageInfo);
 		offset += sizeof(unsigned);
-//		printf("page number: %d \t", pageNum);
+		//printf("page number: %d \t", pageNum);
 
 		fseek(pageInfo, offset, SEEK_SET);
 		unsigned lastSlotNum = sd->getLastSlotNum();
 		fwrite(&lastSlotNum, sizeof(unsigned), 1, pageInfo);
 		offset += sizeof(unsigned);
-//		printf("last slot number: %d\n", lastSlotNum);
+		//printf("last slot number: %d\n", lastSlotNum);
 
 		for(int j=0;j<sd->getLastSlotNum()+1;j++)
 		{
@@ -623,7 +624,7 @@ RC FileHandle::savePageInfo()
 			fwrite(p, sizeof(SlotDirectoryNode), 1, pageInfo);
 			offset += sizeof(SlotDirectoryNode);
 
-//			printf("slot: %d, offset: %d\n", j, p->getSlotOffset());
+			//printf("slot: %d, offset: %d\n", j, p->getSlotOffset());
 
 		}
 
@@ -635,7 +636,7 @@ RC FileHandle::savePageInfo()
 
 RC FileHandle::readPage(PageNum pageNum, void *data)
 {
-	printf("......entering readPage()......\n");
+	//printf("......entering readPage()......\n");
 	if(pageMaxNum == -1){
 		printf("pageMaxNum = -1\n");
 		return -1001;
@@ -646,16 +647,32 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 		printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
 		return -1000;
 	}else{
-		printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
+		//printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
 	}
-	//memset(data, '\0', PAGE_SIZE);
 
-	fseek (pFile, pageNum * PAGE_SIZE, SEEK_SET);
-	//data = (char*) malloc (sizeof(char)*PAGE_SIZE);
+	if(pageToBuffer.find(pageNum)==pageToBuffer.end())
+	{
+		//pageNum is not in the buffer
+		//read the page,
+		fseek(pFile, pageNum * PAGE_SIZE, SEEK_SET);
+		fread(data, 1, PAGE_SIZE, pFile);
+		//find available pageBuffer,
+		int bufferId = lookforBuffer();
+		//store it in the pageBuffer
+		memcpy(pageBuffer[bufferId], data, PAGE_SIZE);
+		//set the hash_map for both pageToBuffer and bufferToPage
+		pageToBuffer[pageNum] = bufferId;
+		bufferToPage[bufferId] = pageNum;
 
-	int count = fread(data, 1, PAGE_SIZE, pFile);
+	}else{
+		//pageNum is in the buffer
+		int bufferid = pageToBuffer[pageNum];
+		memcpy(data, pageBuffer[bufferid], PAGE_SIZE);
 
-	printf("pFile :%ld, count %d \n", pFile, count);
+	}
+
+
+//	printf("pFile :%ld, count %d \n", pFile, count);
 
 	//rewind(pFile);
     return 0;
@@ -671,26 +688,41 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
 	{
 		return -1000;
 	}else{
-		printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
+		//printf("pagenumber: %u, maxPageNUm : %i\n",pageNum, pageMaxNum);
 	}
-	printf("writePage: data to be written %s\n", data);
-	fseek (pFile, pageNum * PAGE_SIZE, SEEK_SET);
-	int count = fwrite(data, 1, PAGE_SIZE, pFile);
 
-	printf("writePage:%ld, %d, %s\n", pFile, count, data);
-	//fseek(pFile, 0, SEEK_SET);
-	rewind(pFile);
+
+	if(pageToBuffer.find(pageNum)==pageToBuffer.end()){
+		//the page is not in the buffer, we have to write it back to the disk directly
+		fseek (pFile, pageNum * PAGE_SIZE, SEEK_SET);
+		int count = fwrite(data, 1, PAGE_SIZE, pFile);
+
+		rewind(pFile);
+
+	}else{
+		//if the pageNum is in the buffer, write it back, and set the page isClean to false
+		int bufferId = pageToBuffer[pageNum];
+		memcpy(pageBuffer[bufferId], (char *)data, PAGE_SIZE);
+		setBufferDirty(bufferId);
+	}
+
     return 0;
 }
 
 
 RC FileHandle::appendPage(const void *data)
 {
-	printf("......entering appendPage().......\n");
+	//printf("......entering appendPage().......\n");
+	//both write back to disk, and save it to buffer
 	pageMaxNum++;
 	fseek(pFile, pageMaxNum * PAGE_SIZE, SEEK_SET);
 	int count = fwrite(data, 1, PAGE_SIZE, pFile);
 	printf("new page appended! no.%d, bytes: %d \n", pageMaxNum, count);
+
+	int bufferId = lookforBuffer();
+	memcpy(pageBuffer[bufferId], (char *)data, PAGE_SIZE);
+	pageToBuffer[pageMaxNum] = bufferId;
+	bufferToPage[bufferId] = pageMaxNum;
 
 	int rc = appendToPageFreeSpace();
 	assert(rc == 0);
@@ -709,12 +741,12 @@ unsigned FileHandle::getNumberOfPages()
 
 RC FileHandle::reduceFreeBytes(unsigned pageNum, int bytes)
 {
-	printf("......entering reduceFreeBytes()......\n");
+	//printf("......entering reduceFreeBytes()......\n");
 	if(pageNum > pageMaxNum)
 		return -15;
 	FreeBytes *fb = fbList[pageNum];
 	/***for test **/
-	printf("reduce %d bytes in page %d\n", bytes, pageNum);
+	//printf("reduce %d bytes in page %d\n", bytes, pageNum);
 	int rc = fb->reduceFreeBytes(bytes);
 	assert(rc == 0);
 	return 0;
@@ -750,7 +782,7 @@ RC FileHandle::reset(unsigned pageNum)
 
 RC FileHandle::appendToPageFreeSpace()
 {
-	printf("......entering appendToPageFreeSpace()......\n");
+//	printf("......entering appendToPageFreeSpace()......\n");
 	FreeBytes *fb = new FreeBytes();
 
 	fb->setFreeBytes(PAGE_SIZE);
@@ -763,27 +795,27 @@ RC FileHandle::appendToPageFreeSpace()
 //
 //	}
 //	curr = fb;
-	printf("append free space for page. %d, bytes: %d \n", pageMaxNum, fb->getFreeBytes());
+//	printf("append free space for page. %d, bytes: %d \n", pageMaxNum, fb->getFreeBytes());
 	return 0;
 }
 
 
 RC FileHandle::appendToSlotDirectory()
 {
-	printf("......entering appendToSlotDirectory()......\n");
+//	printf("......entering appendToSlotDirectory()......\n");
 	SlotDirectory *sdptr = new SlotDirectory();
 	sdptr->setPageNum(pageMaxNum);
 
 	pageSlotDirectory.push_back(sdptr);
 
-	printf("append slot directory for page. %d\n", pageMaxNum);
+//	printf("append slot directory for page. %d\n", pageMaxNum);
 	return 0;
 }
 
 //do free space management before append slotdir(offset, bytes) to the slotdirectory of pageNum
 RC FileHandle::appendSlot(unsigned pageNum, int bytes)
 {
-	printf("......entering appendSlot()......\n");
+//	printf("......entering appendSlot()......\n");
 	if(pageNum > pageMaxNum) return -21;
 	//reduce the free bytes of page: pageNum
 	/*FreeBytes * fb= fbList[pageNum];
@@ -797,11 +829,11 @@ RC FileHandle::appendSlot(unsigned pageNum, int bytes)
 	//insert the slot directory
 	SlotDirectory *p = pageSlotDirectory[pageNum];
 	int offset = p->getEndPosition();
-	printf("new slot offset is %d\n", offset);
+//	printf("new slot offset is %d\n", offset);
 
 	//pageNum append slot(offset, bytes)
 	int rc = p->appendSlot(offset, bytes);
-	printf("append a new slot no.%d for page. %d, offset: %d\n", p->getLastSlotNum(), pageMaxNum, offset);
+//	printf("append a new slot no.%d for page. %d, offset: %d\n", p->getLastSlotNum(), pageMaxNum, offset);
 	return rc;
 }
 /*
@@ -826,14 +858,30 @@ unsigned FileHandle::lookforSlot(unsigned pNum, int bytesNeed)
 
 unsigned FileHandle::lookforPage(int bytesNeed){
 	FreeBytes *fb;
-	for(int i=0; i< fbList.size(); i++)
+	int pageEndSpace;
+	if(pageMaxNum==-1)
+	{
+		return -1;
+	}
+	for(int i = 0; i <= pageMaxNum; i++)
+	{
+		pageEndSpace = PAGE_SIZE - getEndPosition(i);
+		if(pageEndSpace >= bytesNeed){
+			printf("lookforPage: available page found, No. %d\n", i);
+						return i;
+		}
+	}
+
+
+	/*for(int i=0; i< fbList.size(); i++)
 	{
 		fb = fbList[i];
+
 		if(fb->getFreeBytes() >= bytesNeed){
 			printf("lookforPage: available page found, No. %d\n", i);
 			return i;
 		}
-	}
+	}*/
 	printf("no available page found\n");
 	return -1;
 }
@@ -863,7 +911,8 @@ int FileHandle::getOffset(unsigned pageNum, int slotNum)
 	}
 	SlotDirectory *p = pageSlotDirectory[pageNum];
 	int offset = p->getOffset(slotNum);
-	printf("offset in page.%d for slot.%d: %d\n", pageNum, slotNum, offset);
+//	printf("offset in page.%d for slot.%d: %d", pageNum, slotNum, offset);
+//	printf(", length:%d\n", p->getLength(slotNum));
 	return offset;
 }
 
@@ -876,7 +925,7 @@ int FileHandle::getLength(unsigned pageNum, int slotNum)
 	}
 	SlotDirectory *p = pageSlotDirectory[pageNum];
 	int len = p->getLength(slotNum);
-	printf("byte size in page.%d for slot.%d: %d\n", pageNum, slotNum, len);
+//	printf("byte size in page.%d for slot.%d: %d\n", pageNum, slotNum, len);
 	return len;
 }
 
@@ -933,4 +982,56 @@ RC FileHandle::getSlotTombStoneRID(unsigned pageNum, int slotNum, RID &rid)
 	if(pageNum > pageMaxNum) return -21;
 	SlotDirectory * p = pageSlotDirectory[pageNum];
 	return p->getSlotTombStoneRID(slotNum, rid);
+}
+
+int FileHandle::lookforBuffer(){
+
+	if(isClean[topBuffer]==false)
+	{
+		//get the buffer's corresponding pageBum
+		int pageNum = bufferToPage[topBuffer];
+		//and remove the pagenum from both hash_map<> bufferToPage and pageToBuffer
+		pageToBuffer.erase(pageNum);
+		bufferToPage.erase(topBuffer);
+
+		//the bufferid: topBuffer is modified, it needs to be writed back to disk,
+		fseek (pFile, pageNum * PAGE_SIZE, SEEK_SET);
+		int count = fwrite(pageBuffer[topBuffer], 1, PAGE_SIZE, pFile);
+
+		rewind(pFile);//is it necessary?
+		setBufferClean(topBuffer);
+	}
+
+
+	int res = topBuffer;
+	topBuffer = (topBuffer+1)%100;
+	return res;
+}
+
+
+RC FileHandle::bufferFlush()
+{
+	//write back the dirty buffers to disk
+	int pageNum;
+	for(int bufferId =0; bufferId<100;bufferId++)
+	{
+		if(isClean[bufferId]==false){
+			pageNum = bufferToPage[bufferId];
+			fseek (pFile, pageNum * PAGE_SIZE, SEEK_SET);
+			fwrite(pageBuffer[topBuffer], 1, PAGE_SIZE, pFile);
+
+			rewind(pFile);//is it necessary?
+			setBufferClean(topBuffer);
+		}
+	}
+}
+
+void FileHandle::setBufferDirty(int bufferId)
+{
+	isClean[bufferId]=false;
+}
+
+void FileHandle::setBufferClean(int bufferId)
+{
+	isClean[bufferId]=true;
 }

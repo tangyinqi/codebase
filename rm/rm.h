@@ -15,6 +15,7 @@ using namespace std;
 
 # define RM_EOF (-1)  // end of a scan operator
 # define CATALOG ".catalog"
+# define TABLE  "Tables"
 
 // RM_ScanIterator is an iteratr to go through tuples
 // The way to use it is like the following:

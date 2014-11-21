@@ -14,6 +14,84 @@ RelationManager* RelationManager::instance()
 
 RelationManager::RelationManager()
 {
+	//creat tables' table
+/*	int rc = RecordBasedFileManager::instance()->createFile(TABLE);
+	assert(rc==0);
+
+	//create the catalog for each table
+	string catalogName = TABLE.append(string(CATALOG));
+	rc = RecordBasedFileManager::instance()->createFile(catalogName);
+	assert(rc==0);
+
+	vector<Attribute> tableNameAttributes;
+	Attribute attr;
+	attr.name = "table_name";
+	attr.type = TypeVarChar;
+	attr.length = (AttrLength)10;
+	tableNameAttributes.push_back(attr);
+
+	attr.name = "file_name";
+	attr.type = TypeVarChar;
+	attr.length = (AttrLength)10;
+	tableNameAttributes.push_back(attr);
+
+	attributes[TABLE] = tableNameAttributes;
+
+	FileHandle filehandle_catalog;
+	filehandles_catalog[TABLE] = filehandle_catalog;
+
+	rc = RecordBasedFileManager::instance()->openFile(catalogName, filehandle_catalog);
+	assert(rc==0);
+
+	for (int i = 0; i < tableNameAttributes.size(); i++) {
+		vector<Attribute> recordAttribute;
+		Attribute attr;
+		int length = 4; //size of name
+		length += attributes[i].length(); //name
+
+		length += 4; //type int
+		length += 4; //position int
+
+		cout<<"TABLE.length:"<<TABLE.length<<endl;
+
+		void * data = (void *) malloc(length);
+		unsigned len = (AttrLength) attributes[i].length();
+		memcpy((char *) data, &len, sizeof(int));
+		memcpy((char *) data + 4, (char *) attributes[i].c_str(), attributes[i].length());
+		attr.name = attributes[i];
+		attr.type = TypeVarChar;
+		attr.length = (AttrLength) attributes[i].length();
+		recordAttribute.push_back(attr);
+
+		memcpy((char *) data + 4 + attributes[i].length(), TABLE, TABLE.length);
+		attr.name = "rel_Name";
+		attr.type = TypeVarChar;
+		attr.length = (AttrLength) .length();
+		recordAttribute.push_back(attr);
+
+		memcpy((char *) data + 4 + attributes[i].length(), &attrs[i].type, sizeof(int));
+		attr.name = "TYPE";
+		attr.type = TypeInt;
+		attr.length = (AttrLength) 4;
+		recordAttribute.push_back(attr);
+
+		memcpy((char *) data + 8 + attrs[i].name.length(), &i, sizeof(int));
+		attr.name = "Position";
+		attr.type = TypeInt;
+		attr.length = (AttrLength) 4;
+		recordAttribute.push_back(attr);
+		RID rid;
+
+		rc = RecordBasedFileManager::instance()->insertRecord(filehandle_catalog, recordAttribute, data, rid);
+		assert(rc==0);
+
+		//if(rc!=0)return rc;
+		recordAttribute.clear();
+		free(data);
+	}
+
+	tableHandle.savePageInfo();
+	*/
 }
 
 RelationManager::~RelationManager()
@@ -31,7 +109,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	assert(rc==0);
 	if(rc != 0)return rc;
 
-	//create the catalog for table
+	//create the catalog for each table
 	string catalogName = string(tableName).append(string(CATALOG));
 	rc = RecordBasedFileManager::instance()->createFile(catalogName);
 	assert(rc==0);
@@ -48,14 +126,12 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	}
 	attributes[tableName] = tableNameAttributes;
 
-
 	FileHandle filehandle_catalog;
 	filehandles_catalog[tableName] = filehandle_catalog;
 
 	rc = RecordBasedFileManager::instance()->openFile(catalogName, filehandle_catalog);
 	assert(rc==0);
 	if(rc != 0)return rc;
-
 
 	for(int i=0;i<attrs.size();i++)
 	{
@@ -86,8 +162,9 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 		attr.length = (AttrLength)4;
 		recordAttribute.push_back(attr);
 		RID rid;
-		int rc = RecordBasedFileManager::instance()->insertRecord(filehandle_catalog, recordAttribute, data, rid);
+		rc = RecordBasedFileManager::instance()->insertRecord(filehandle_catalog, recordAttribute, data, rid);
 		assert(rc==0);
+
 		//if(rc!=0)return rc;
 		recordAttribute.clear();
 		free(data);
@@ -97,6 +174,16 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	//rc = RecordBasedFileManager::instance()->closeFile(filehandle_catalog);
 	assert(rc == 0);
 	if(rc != 0)return rc;
+
+//	insert information to the "Tables."
+//	rc = tableHandle.readPageInfo();
+//	assert(rc==0);
+//	rc = RecordBasedFileManager::instance()->insertRecord(tableHandle, recordAttribute, data, rid);
+//	assert(rc==0);
+//	rc = tableHandle.savePageInfo();
+//	assert(rc==0);
+
+
 	return 0;
 }
 
@@ -109,7 +196,7 @@ RC RelationManager::deleteTable(const string &tableName)
 		FileHandle filehandle;
 		if(filehandles.find(tableName) != filehandles.end()){
 			filehandle = filehandles[tableName];
-			printf("#deleteTable(): filehandle_catalog found in table\n");
+			printf("#deleteTable(): filehandles found in table\n");
 			filehandle.readPageInfo();
 		}else{
 			rc = RecordBasedFileManager::instance()->openFile(tableName, filehandle);
@@ -266,13 +353,13 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	if (filehandles.find(tableName) != filehandles.end()) {
 		filehandle = filehandles[tableName];
 
-		printf("#insertTuple():filehandle found in table!\n");
+//		printf("#insertTuple():filehandle found in table!\n");
 		filehandle.readPageInfo();
 	} else {
 		rc = RecordBasedFileManager::instance()->openFile(tableName, filehandle);
 		assert(rc == 0);
 		filehandles[tableName] = filehandle;
-		printf("#insertTuple():filehandle not found in table, new open file!\n");
+//		printf("#insertTuple():filehandle not found in table, new open file!\n");
 	}
 
 	rc = RecordBasedFileManager::instance()->insertRecord(filehandle, attri, data, rid);
@@ -395,13 +482,13 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 	FileHandle filehandle;
 	if (filehandles.find(tableName) != filehandles.end()) {
 		filehandle = filehandles[tableName];
-		printf("#readTuple():filehandle found in table!\n");
+//		printf("#readTuple():filehandle found in table!\n");
 		filehandle.readPageInfo();
 	} else {
 		rc = RecordBasedFileManager::instance()->openFile(tableName, filehandle);
 		assert(rc == 0);
 		filehandles[tableName] = filehandle;
-		printf("#readTuple():filehandle not found in table! new open File!\n");
+//		printf("#readTuple():filehandle not found in table! new open File!\n");
 	}
 
 	rc = RecordBasedFileManager::instance()->readRecord(filehandle, attri, rid, data);

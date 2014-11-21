@@ -81,9 +81,7 @@ void TEST_RM_7(const string &tableName)
 int main()
 {
     cout << endl << "Test Reorganize Page .." << endl;
-	remove("tbl_employee2");
-    // Create Table tbl_employee2
-    createTable("tbl_employee2");
+
     // Reorganize Page
     TEST_RM_7("tbl_employee2");
 

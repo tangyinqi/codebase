@@ -16,10 +16,21 @@ typedef unsigned PageNum;
 #include <vector>
 #include "cassert"
 #include <sys/stat.h>
+#include <map>
+#include <ext/hash_map>
 
 using namespace std;
 
-bool FileExists(const char *fileName);
+/******************   helper method   **********************/
+// Check if a file exists
+bool FileExists(const char *fileName)
+{
+    struct stat stFileInfo;
+
+    if(stat(fileName, &stFileInfo) == 0) return true;
+    else return false;
+}
+
 
 struct SlotDir{
  int offset;//bytes from the start of page
@@ -178,9 +189,13 @@ private:
 
     vector<FreeBytes *> fbList;
 //    FreeBytes * curr;
-
     vector<SlotDirectory *> pageSlotDirectory;
 
+    char pageBuffer[100][PAGE_SIZE];//100 page buffer
+    int topBuffer;
+    bool isClean[100];//whether the page is dirty or clean
+    __gnu_cxx::hash_map<unsigned, unsigned> pageToBuffer;//pageNum, bufferId
+    __gnu_cxx::hash_map<unsigned, unsigned> bufferToPage;//bufferId, pageNum
 
 public:
     FileHandle();                                                    // Default constructor
@@ -231,6 +246,11 @@ public:
 	int getEndPosition(unsigned PageNum);//offset+ length of last slot in page: PageNum
 	const int getLastSlotNum(unsigned PageNum);
 
+	int lookforBuffer();
+	RC bufferFlush();
+
+	void setBufferDirty(int bufferId);
+	void setBufferClean(int bufferId);
  };
 
 

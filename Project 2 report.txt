@@ -1,0 +1,27 @@
+Timothy Johnson
+Rachel (Yinqi) Tang
+CS 222 Project 2 report
+
+
+The layers of our program for project 2 work as follows.
+
+1) Paged file manager
+
+Each file in our database also has an info page, which stores the slot directory. Whenever our paged file manager adds a new page to a file, a new slot directory is added to the associated info file. Our table itself can thus contain just records.
+
+The slot directory contains nodes that include information such as: the page number, the slot number, the offset for the start of our record on the page, a flag for when the record at that slot has been deleted, etc. There can also be a tombstone entry, so that when a record is moved, we have a pointer to its new location.
+
+2) Record based file manager
+
+Our record based file manager allows us to insert records, update records, search for records, and delete records. To insert a record, we just look for a page with available space. If a page has no available space, we try to reorganize it by looking for slots that were deleted. If we still cannot find space, we add a new page with our new record.
+
+To update a record, we first try to modify it in place. But if the new version of our record is longer than the previous version, then there may not be enough space left on the page. In that case, we insert the record on a different page, and leave a tombstone with its new location.
+
+When we delete a record, we mark the deleted flag in the slot directory node for that record on that page. This slot is not claimed immediately, but may be used later if we reorganize the page.
+
+We also can create an iterator that scans through all of the records in our file in the order that they are stored.
+
+3) Relation manager
+
+The relation manager offloads most of the work of inserting, reading, updating, and deleting individual records to the record based file manager. But it provides the additional functionality of being able to create the catalogs and tables, read the catalog for each table, and search for specific attributes.
+

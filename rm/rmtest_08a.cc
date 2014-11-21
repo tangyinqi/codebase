@@ -73,11 +73,6 @@ int main()
 {
     cout << endl << "Test Simple Scan .." << endl;
 
-    remove("tbl_employee3");
-
-    // Create Table tbl_employee3
-    createTable("tbl_employee3");
-
      // Simple Scan
     TEST_RM_8_A("tbl_employee3");
 

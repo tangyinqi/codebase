@@ -232,7 +232,7 @@ int RecordBasedFileManager::getByteSize(const vector<Attribute> &recordDescripto
 		}
 		//bytesNeed += attr.length;
 	}
-	printf("the bytesNeed is: %d\n", offset);
+//	printf("the bytesNeed is: %d\n", offset);
 	return offset;
 }
 
@@ -381,14 +381,14 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 		return -1001;
 	}
 
-	printf("****** before reading......\n");
+//	printf("****** before reading......\n");
 
 	int pageOffset = fileHandle.getOffset(pNum, sNum);
-	printf("page offset is %d\n", pageOffset);
+/*	printf("page offset is %d\n", pageOffset);
 	if(recordDescriptor.size() != 0){
 		printRecord(recordDescriptor, (char *)buffer + pageOffset);
 	}
-
+*/
 
 	Attribute attr;
 
@@ -397,7 +397,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 
 
 	memcpy(data, (char *)buffer + pageOffset, bufferLen);
-	printf("****** after memcpying......\n");
+/*	printf("****** after memcpying......\n");
 	if(recordDescriptor.size() != 0){
 		printRecord(recordDescriptor, data);
 	}
@@ -407,6 +407,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 	if(recordDescriptor.size() != 0){
 		printRecord(recordDescriptor, data);
 	}
+*/
 	return 0;
 }
 
