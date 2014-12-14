@@ -9,6 +9,13 @@
 //#include <assert.h>
 #include <string>
 
+bool FileExists(const char *fileName)
+{
+    struct stat stFileInfo;
+
+    if(stat(fileName, &stFileInfo) == 0) return true;
+    else return false;
+}
 
 
 /*******************    implementation of class PageSlotDirectory   *************************/
@@ -1024,6 +1031,8 @@ RC FileHandle::bufferFlush()
 			setBufferClean(topBuffer);
 		}
 	}
+
+	return 0;
 }
 
 void FileHandle::setBufferDirty(int bufferId)

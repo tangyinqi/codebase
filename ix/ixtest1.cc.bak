@@ -31,10 +31,12 @@ int testCase_1(const string &indexFileName)
     if(rc == success)
     {
         cout << "Index File Created!" << endl;
+
     }
     else
     {
         cout << "Failed Creating Index File..." << endl;
+        IX_PrintError(rc);
         return fail;
     }
 
@@ -54,7 +56,7 @@ int testCase_1(const string &indexFileName)
     if(rc == success)
     {
         if (numberOfPagesFromFunction < numberOfPages) {
-        	cout << "Number of initially constructed pages is not correct." << endl;
+        	cout <<numberOfPagesFromFunction <<" Number of initially constructed pages is not correct." << endl;
         	return fail;
         }
     }

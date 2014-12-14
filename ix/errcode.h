@@ -13,4 +13,12 @@
 
 #define BUCKETS_FULL -135
 
+#define PAGEID_EXCEEDS -137
+
+#define ENTRY_NOT_EXIST -139
+
+#define KEY_NOT_FOUNT -141
+
+#define End_Of_File -143
+
 #endif
