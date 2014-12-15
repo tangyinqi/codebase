@@ -62,11 +62,16 @@ int Bucket::getFirstEntryPostion(const Attribute &attribute, const void *key)
 
 RC Bucket::deleteEntry(const Attribute &attribute, const void *key, const RID &rid)
 {
+	cout<<"##deleteEntry():"<<endl;
+	cout<<"before deletion:"<<endl;
+	this->print(attribute);
+
 	int start = getFirstEntryPostion(attribute, key);
 	Entry entry = getEntry(start);
 	int index;
 	if((entry.rid.pageNum == rid.pageNum ) && (entry.rid.slotNum == rid.slotNum))
 	{
+//		cout<<
 		index = start;
 	}else{
 		for(int i=start+1; i<last; i++){
@@ -78,6 +83,7 @@ RC Bucket::deleteEntry(const Attribute &attribute, const void *key, const RID &r
 					memcpy(&key2, (char *) key, sizeof(int));
 					if ((key1 == key2) && (entry.rid.pageNum == rid.pageNum)
 							&& (entry.rid.slotNum == rid.slotNum)) {
+						cout<<"[key="<<key1;
 						index = i;
 						break;
 					}
@@ -88,12 +94,14 @@ RC Bucket::deleteEntry(const Attribute &attribute, const void *key, const RID &r
 					memcpy(&key2, (char *)key, sizeof(float));
 					if((key1 == key2) && (entry.rid.pageNum == rid.pageNum ) && (entry.rid.slotNum == rid.slotNum))
 					{
+						cout<<"[key="<<key2;
 						index = i;
 						break;
 					}
 				}else if(attribute.type == 2){
 					if((strcmp((char *)key, (char *)entry.key.key3) == 0) && (entry.rid.pageNum == rid.pageNum ) && (entry.rid.slotNum == rid.slotNum))
 					{
+						//cout<<"[key="<<key;
 						index = i;
 						break;
 					}
@@ -109,6 +117,7 @@ RC Bucket::deleteEntry(const Attribute &attribute, const void *key, const RID &r
 		return ENTRY_NOT_EXIST;
 	}
 
+	cout<<"/"<<rid.pageNum<<","<<rid.slotNum<<"]"<<endl;
 	vector<Entry> entryBackup;
 	for(int i=0; i<last; i++)
 	{
@@ -117,11 +126,13 @@ RC Bucket::deleteEntry(const Attribute &attribute, const void *key, const RID &r
 		}
 	}
 
-	entrys.clear();
+	entrys.erase(entrys.begin(), entrys.end());
+	last = 0;
 	entryLookup1.clear();
 	entryLookup2.clear();
 	entryLookup3.clear();
-
+	cout<<"after clear():"<<endl;
+	this->print(attribute);
 	for(int i=0; i< entryBackup.size(); i++)
 	{
 		Entry entry2 = entryBackup[i];
@@ -130,7 +141,12 @@ RC Bucket::deleteEntry(const Attribute &attribute, const void *key, const RID &r
 //		entry2.rid.slotNum = entryBackup[i].rid.slotNum;
 		addEntry(entry2, attribute.type);
 	}
-	last--;
+//	last--;
+
+	cout<<"after deletion:"<<endl;
+	this->print(attribute);
+
+
 	return SUCCESS;
 }
 
@@ -351,7 +367,7 @@ RC Bucket::rangeScan(const Attribute &attribute,
 
 	}
 
-
+//	exit(-1);
 	return SUCCESS;
 }
 
@@ -525,7 +541,7 @@ void Bucket::print(const Attribute &attribute)
 	if(last!=0){
 		cout<<"entries:";
 	}
-	for(int i=0;i<last;i++)
+	for(int i=0;i<entrys.size();i++)
 	{
 		switch(attribute.type){
 		case 0:
@@ -783,13 +799,24 @@ unsigned LinearHash::hash(const Attribute &attribute, const void *key, int level
 	cout<<"## hash(): level = "<<level<<", N = "<<N;
 	unsigned hash_value;
 	switch(attribute.type){
-	case 0:
-	case 1:
-//		hash_value = key.key1;
-		memcpy(&hash_value, (char *)key, sizeof(int));
-		hash_value = hash_value % N;
+	case 0:{
+		int key1;
+		memcpy(&key1, (char *)key, sizeof(int));
+		cout<<"key = "<<key1;
+		key1 = key1 % N;
+		cout<<", hash_value = "<<key1<<endl;
+		return key1;
+	}
+	case 1:{
+		float key2;
+		memcpy(&key2, (char *)key, sizeof(int));
+		cout<<"key = "<<key2;
+		int key3 = (int)key2 % N;
+		cout<<", hash_value = "<<key3;
+		return key3;
 		break;
-	case 2:
+	}
+	case 2:{
 		int len;
 		memcpy(&len, (char *)key, sizeof(int));
 		char *var = (char *)malloc(len);
@@ -800,11 +827,17 @@ unsigned LinearHash::hash(const Attribute &attribute, const void *key, int level
 			hash_value *= 100;
 			hash_value += var[i];
 		}
+		cout<<"key = "<<hash_value;
 		hash_value = hash_value % N;
+		cout<<", hash_value = "<<hash_value;
+
+		return hash_value;
 		break;
+		}
 	}
-	cout<<", hash_value = "<<hash_value<<endl;
-	return hash_value;
+
+
+	//return hash_value;
 }
 
 unsigned LinearHash::hash(const Attribute &attribute, EntryKey key, int level)
@@ -814,12 +847,19 @@ unsigned LinearHash::hash(const Attribute &attribute, EntryKey key, int level)
 	cout<<"## hash(): level = "<<level<<", N = "<<N;
 	unsigned hash_value;
 	switch(attribute.type){
-	case 0:
-	case 1:
-		hash_value = key.key1;
+	case 0:{
+		int key1 = key.key1;
+		cout<<", key = "<<key1;
+		key1 = key1 % N;
+		cout<<", hash_value = "<<key1<<endl;
+		return key1;
+	}
+	case 1:{
+		hash_value = key.key2;
 //		memcpy(&hash_value, (char *)key, sizeof(int));
 		hash_value = hash_value % N;
 		break;
+	}
 	case 2:
 		int len;
 		memcpy(&len, (char *)key.key3, sizeof(int));
@@ -901,6 +941,7 @@ RC LinearHash::insertEntry(unsigned bucketId, const Attribute &attribute, Entry 
 
 RC LinearHash::deleteEntry(unsigned primePageId, const Attribute &attribute, const void *key, const RID &rid)
 {
+//	cout<<"##deleteEntry()"<<endl;
 	Bucket *bucket = getBucket(primePageId);
 	int rc = bucket->deleteEntry(attribute, key, rid);
 	assert(rc == 0);
@@ -916,6 +957,7 @@ RC LinearHash::deleteEntry(unsigned primePageId, const Attribute &attribute, con
 		if(buckets.empty()){
 			bucket->resetOverFlow();
 		}
+		//overFlowPages->
 	}
 
 	if(primeBuckets.at(primeBucketNumber-1)->isEmpty() && !primeBuckets.at(primeBucketNumber-1)->isOverFlow()){
@@ -1009,7 +1051,6 @@ RC LinearHash::split(const Attribute &attribute)
 	oldImage->print(attribute);
 	//if()
 	splitImage->print(attribute);
-
 
 	metaData->increaseNext();
 	return SUCCESS;
@@ -1466,31 +1507,36 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 		return End_Of_File;
 	}
 
-	rid.pageNum = entries[pos].rid.pageNum;
-	rid.slotNum = entries[pos].rid.slotNum;
-
+	cout<<"IX_ScanIterator: [key = ";
 	switch(type)
 	{
 	case 0:
 		memcpy((char *)key, &entries[pos].key.key1, sizeof(int));
-//		key = entries[pos].key.key1;
+		cout<<entries[pos].key.key1;
 		break;
 	case 1:
 		memcpy((char *)key, &entries[pos].key.key2, sizeof(float));
+		cout<<entries[pos].key.key2;
 		break;
 	case 2:
 		memcpy((char *)key, entries[pos].key.key3, sizeof(int));
 		break;
 	}
+
+	rid.pageNum = entries[pos].rid.pageNum;
+	rid.slotNum = entries[pos].rid.slotNum;
+
+	cout<<"/"<<rid.pageNum<<","<<rid.slotNum<<"]"<<endl;
 	pos++;
+//	exit(-1);
 	return SUCCESS;
 }
 
 RC IX_ScanIterator::close()
 {
 	entries.clear();
-	pos = -1;
-	eof = -1;
+	pos = 0;
+	eof = 0;
 	return SUCCESS;
 }
 
